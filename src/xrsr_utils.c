@@ -180,6 +180,7 @@ const char *xrsr_power_mode_str(xrsr_power_mode_t power_mode) {
    switch(power_mode) {
       case XRSR_POWER_MODE_FULL:    return("FULL");
       case XRSR_POWER_MODE_LOW:     return("LOW");
+      case XRSR_POWER_MODE_SLEEP:   return("SLEEP");
       case XRSR_POWER_MODE_INVALID: return("INVALID");
    }
    return(xrsr_invalid_return(power_mode));

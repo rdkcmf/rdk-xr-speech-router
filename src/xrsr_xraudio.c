@@ -780,8 +780,8 @@ bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mod
    xraudio_power_mode_t xraudio_power_mode = XRAUDIO_POWER_MODE_INVALID;
 
    switch(power_mode) {
-      case XRSR_POWER_MODE_FULL: { xraudio_power_mode = XRAUDIO_POWER_MODE_FULL; break; }
-      case XRSR_POWER_MODE_LOW:  { xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;  break; }
+      case XRSR_POWER_MODE_FULL:  { xraudio_power_mode = XRAUDIO_POWER_MODE_FULL; break; }
+      case XRSR_POWER_MODE_SLEEP: { xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP; break; }
       default: {
          XLOGD_ERROR("invalid power mode <%s>", xrsr_power_mode_str(power_mode));
          return(false);

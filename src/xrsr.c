@@ -363,7 +363,16 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
    }
    #endif
 
-   xraudio_power_mode_t xraudio_power_mode = (power_mode == XRSR_POWER_MODE_FULL) ? XRAUDIO_POWER_MODE_FULL : XRAUDIO_POWER_MODE_LOW;
+   xraudio_power_mode_t xraudio_power_mode;
+
+   switch(power_mode) {
+      case XRSR_POWER_MODE_FULL:  xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;  break;
+      case XRSR_POWER_MODE_SLEEP: xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP; break;
+      default:
+         XLOGD_ERROR("Invalid power mode");
+         return(false);
+   }
+
    g_xrsr.xrsr_xraudio_object = xrsr_xraudio_create(XRSR_KEYWORD_PHRASE, config, xraudio_power_mode, privacy_mode, json_obj_xraudio);
 
    if(capture_config != NULL) {
@@ -807,6 +816,10 @@ bool xrsr_power_mode_set(xrsr_power_mode_t power_mode) {
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
    sem_wait(&semaphore);
    sem_destroy(&semaphore);
+
+   if(result) {
+      g_xrsr.power_mode = power_mode;
+   }
 
    return(result);
 }
@@ -1965,3 +1978,4 @@ xrsr_audio_format_t xrsr_audio_format_get(xrsr_audio_format_t format_dst, xraudi
    }
    return(XRSR_AUDIO_FORMAT_INVALID);
 }
+

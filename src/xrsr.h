@@ -174,7 +174,8 @@ typedef enum {
 typedef enum {
    XRSR_POWER_MODE_FULL    = 0, ///< Full power mode
    XRSR_POWER_MODE_LOW     = 1, ///< Low power mode
-   XRSR_POWER_MODE_INVALID = 2, ///< Invalid power mode type
+   XRSR_POWER_MODE_SLEEP   = 2, ///< Lower power mode
+   XRSR_POWER_MODE_INVALID = 3, ///< Invalid power mode type
 } xrsr_power_mode_t;
 
 /// @}
