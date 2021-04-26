@@ -28,15 +28,8 @@
 
 #define FRAME_GROUP_SIZE_MAX (4096)
 
-#if defined(XRSR_LOCAL_MIC_QUAD)
-#define XRSR_LOCAL_MIC (XRAUDIO_DEVICE_INPUT_QUAD)
-#elif defined(XRSR_LOCAL_MIC_TRI)
-#define XRSR_LOCAL_MIC (XRAUDIO_DEVICE_INPUT_TRI)
-#elif defined(XRSR_LOCAL_MIC_TRI_EC_REF_5_1)
-#define XRSR_LOCAL_MIC (XRAUDIO_DEVICE_INPUT_TRI | XRAUDIO_DEVICE_INPUT_EC_REF_5_1)
-#else
-#define XRSR_LOCAL_MIC (XRAUDIO_DEVICE_INPUT_SINGLE)
-#endif
+//This define assumes that low power always uses only one mic. Which is the case for now and seems very likely for the future. If we need to change it later, we will
+#define XRSR_LOCAL_MIC_LOW_POWER (XRAUDIO_DEVICE_INPUT_SINGLE)
 
 typedef struct {
    uint32_t                      identifier;
@@ -51,6 +44,8 @@ typedef struct {
    xraudio_keyword_config_t      keyword_config;
    bool                          audio_stats_rxd;
    xrsr_audio_stats_t            audio_stats;
+   xraudio_devices_input_t       available_inputs[XRAUDIO_INPUT_MAX_DEVICE_QTY];
+   xraudio_devices_output_t      available_outputs[XRAUDIO_OUTPUT_MAX_DEVICE_QTY];
 } xrsr_xraudio_obj_t;
 
 static bool xrsr_xraudio_object_is_valid(xrsr_xraudio_obj_t *obj);
@@ -64,6 +59,9 @@ static void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj);
 static void xrsr_xraudio_keyword_detect_stop(xrsr_xraudio_obj_t *obj);
 static xrsr_src_t xrsr_xraudio_src_to_xrsr(xraudio_devices_input_t src);
 static void xrsr_audio_stats_clear(xrsr_xraudio_obj_t *obj);
+static void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj);
+
+static xraudio_devices_input_t g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
 
 xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_config_t keyword_config, xraudio_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_xraudio) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)malloc(sizeof(xrsr_xraudio_obj_t));
@@ -80,7 +78,6 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
       XLOGD_ERROR("invalid power mode <%s>", xraudio_power_mode_str(power_mode));
       return(NULL);
    }
-
 
    obj->identifier           = XRSR_XRAUDIO_IDENTIFIER;
    obj->xraudio_state        = XRSR_XRAUDIO_STATE_CREATED;
@@ -99,6 +96,7 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
       free(obj);
       return(NULL);
    }
+   xrsr_xraudio_local_mic_type_get(obj);
 
    return((xraudio_object_t)obj);
 }
@@ -235,7 +233,7 @@ void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[])
       }
       switch(srcs[index]) {
          case XRSR_SRC_MICROPHONE: {
-            obj->device_input |= XRSR_LOCAL_MIC;
+            obj->device_input |= g_local_mic_full_power;
             break;
          }
          case XRSR_SRC_RCU_PTT: {
@@ -324,7 +322,7 @@ void xrsr_xraudio_device_granted(xrsr_xraudio_object_t object) {
       result = xraudio_open(obj->xraudio_obj, obj->xraudio_power_mode, obj->xraudio_privacy_mode, obj->device_input, obj->device_output, &format);
 
       if(XRAUDIO_RESULT_ERROR_MIC_OPEN == result) {
-         obj->device_input &= ~XRSR_LOCAL_MIC;
+         obj->device_input &= ~g_local_mic_full_power;
          XLOGD_INFO("mic error, device_input now <%s>", xraudio_devices_input_str(obj->device_input));
          continue;
       }
@@ -724,6 +722,31 @@ void xrsr_audio_stats_clear(xrsr_xraudio_obj_t *obj) {
    }
 }
 
+void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj) {
+   xraudio_result_t result = XRAUDIO_RESULT_OK;
+
+   if(obj == NULL) {
+      XLOGD_ERROR("null xrsr obj");
+      return;
+   }
+
+   memset(obj->available_inputs,  0, sizeof(obj->available_inputs));
+   memset(obj->available_outputs, 0, sizeof(obj->available_outputs));
+
+   result = xraudio_available_devices_get(obj->xraudio_obj, obj->available_inputs, XRAUDIO_INPUT_MAX_DEVICE_QTY, obj->available_outputs, XRAUDIO_OUTPUT_MAX_DEVICE_QTY);
+   if(result != XRAUDIO_RESULT_OK) {
+      XLOGD_ERROR("unable to get available xraudio in/output devices");
+      return;
+   }
+
+   for (int i = 0; i < XRAUDIO_INPUT_MAX_DEVICE_QTY; i++) {
+      if (XRAUDIO_DEVICE_INPUT_LOCAL_GET(obj->available_inputs[i]) != XRAUDIO_DEVICE_INPUT_NONE) {
+         g_local_mic_full_power = obj->available_inputs[i] & ~XRSR_LOCAL_MIC_LOW_POWER;
+         break;
+      }
+   }
+}
+
 void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
@@ -811,7 +834,7 @@ bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable)
       return(false);
    }
 
-   xraudio_result_t result = xraudio_privacy_mode_update(obj->xraudio_obj, XRSR_LOCAL_MIC, enable);
+   xraudio_result_t result = xraudio_privacy_mode_update(obj->xraudio_obj, g_local_mic_full_power, enable);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_ERROR("unable to set xraudio privacy mode <%s>", xraudio_result_str(result));
       return(false);
