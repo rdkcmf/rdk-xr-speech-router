@@ -413,6 +413,11 @@ void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object) {
 void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
    XLOGD_INFO("phrase <%s> config <%s>", xraudio_keyword_phrase_str(obj->keyword_phrase), xraudio_keyword_config_str(obj->keyword_config));
 
+   if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_SLEEP ) {
+      XLOGD_INFO("sleep mode, do not start keyword detector");
+      return;
+   }
+
    xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_config);
    if(XRAUDIO_RESULT_OK != result) {
       XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
@@ -803,13 +808,43 @@ bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mod
    xraudio_power_mode_t xraudio_power_mode = XRAUDIO_POWER_MODE_INVALID;
 
    switch(power_mode) {
-      case XRSR_POWER_MODE_FULL:  { xraudio_power_mode = XRAUDIO_POWER_MODE_FULL; break; }
-      case XRSR_POWER_MODE_SLEEP: { xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP; break; }
+      case XRSR_POWER_MODE_FULL:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;
+         obj->device_input  &= ~XRSR_LOCAL_MIC_LOW_POWER;
+         obj->device_input  |= g_local_mic_full_power;
+         break;
+
+      case XRSR_POWER_MODE_LOW:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;
+         obj->device_input  &= ~g_local_mic_full_power;
+         obj->device_input  |= XRSR_LOCAL_MIC_LOW_POWER;
+         break;
+
+      case XRSR_POWER_MODE_SLEEP:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP;
+         obj->device_input  &= ~g_local_mic_full_power;
+         obj->device_input  |= XRSR_LOCAL_MIC_LOW_POWER;
+         break;
+
       default: {
          XLOGD_ERROR("invalid power mode <%s>", xrsr_power_mode_str(power_mode));
          return(false);
       }
    }
+
+   if(obj->xraudio_power_mode==xraudio_power_mode) {
+      XLOGD_WARN("power mode already <%s>", xrsr_power_mode_str(power_mode));
+      return(true);
+   }
+
+   //Closing, updating power mode, and reopening allows us to configure xraudio inputs and load new firmware easily
+   xrsr_xraudio_device_close(obj);
+   obj->xraudio_power_mode = xraudio_power_mode;
+   #ifdef XRAUDIO_RESOURCE_MGMT
+   xrsr_xraudio_device_request(obj);
+   #else
+   xrsr_xraudio_device_granted(obj);
+   #endif
 
    xraudio_result_t result = xraudio_power_mode_update(obj->xraudio_obj, xraudio_power_mode);
    if(result != XRAUDIO_RESULT_OK) {
@@ -817,7 +852,6 @@ bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mod
       return(false);
    }
 
-   obj->xraudio_power_mode = xraudio_power_mode;
    return(true);
 }
 
@@ -843,3 +877,4 @@ bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable)
    obj->xraudio_privacy_mode = enable;
    return(true);
 }
+

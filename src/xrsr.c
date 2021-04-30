@@ -367,6 +367,7 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
 
    switch(power_mode) {
       case XRSR_POWER_MODE_FULL:  xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;  break;
+      case XRSR_POWER_MODE_LOW:   xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;   break;
       case XRSR_POWER_MODE_SLEEP: xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP; break;
       default:
          XLOGD_ERROR("Invalid power mode");
@@ -1402,6 +1403,12 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                (*http->handlers.session_begin)(http->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_configuration, &begin->timestamp);
             }
 
+            if( (XRSR_SRC_MICROPHONE == g_xrsr.src) && (g_xrsr.power_mode == XRSR_POWER_MODE_LOW) ) {
+                g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
+                g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
+             }
+
+
             if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
                XLOGD_ERROR("xrsr_speech_stream_begin failed");
             } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, begin->xraudio_format, state->timer_obj, (dst->stream_time_min > 0 ? true : false), session_config->query_strs)) {
@@ -1444,6 +1451,10 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                   if(ws->session_configuration.ws.sat_token[0] != '\0') {
                      sat_token = ws->session_configuration.ws.sat_token;
                   }
+                  if( (XRSR_SRC_MICROPHONE == g_xrsr.src) && (g_xrsr.power_mode == XRSR_POWER_MODE_LOW) ) {
+                      g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
+                      g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
+                   }
                }
 
                if(!begin->retry) { // start streaming audio to the pipe

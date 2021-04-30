@@ -202,6 +202,8 @@ typedef struct {
    char                sat_token[XRSR_SAT_TOKEN_LEN_MAX];   ///< NULL-terminated string containing the SAT token
    char                user_agent[XRSR_USER_AGENT_LEN_MAX]; ///< NULL-terminated string containing the user agent field
    const char **       query_strs;                          ///< Pointer to a variable length array of query string parameters.  Last element in the array must be NULL.
+   uint32_t            keyword_begin;                       ///< Sample index at which keyword begins
+   uint32_t            keyword_duration;                    ///< Duration of keyword, in samples
 } xrsr_session_configuration_http_t;
 
 /// @brief XRSR websocket session configuration structure
@@ -212,6 +214,8 @@ typedef struct {
    bool                user_initiated;                    ///< Indicates whether the session was initiated directly by the user (ie. pressing a button)
    char                sat_token[XRSR_SAT_TOKEN_LEN_MAX]; ///< NULL-terminated string containing the SAT token
    const char **       query_strs;                        ///< Pointer to a variable length array of query string parameters.  Last element in the array must be NULL.
+   uint32_t            keyword_begin;                     ///< Sample index at which keyword begins
+   uint32_t            keyword_duration;                  ///< Duration of keyword, in samples
 } xrsr_session_configuration_ws_t;
 
 /// @brief XRSR session configuration structure
