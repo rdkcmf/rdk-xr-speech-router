@@ -599,8 +599,8 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
    result = xraudio_stream_to_pipe(obj->xraudio_obj, source, dsts, format_decoded, xrsr_xraudio_stream_event, (void *)obj);
 
    if(result != XRAUDIO_RESULT_OK) {
-       XLOGD_ERROR("xraudio_stream_to_pipe <%s>", xraudio_result_str(result));
-       return(false);
+      XLOGD_ERROR("xraudio_stream_to_pipe <%s>", xraudio_result_str(result));
+      return(false);
    }
    obj->xraudio_state = XRSR_XRAUDIO_STATE_STREAMING;
    return(true);

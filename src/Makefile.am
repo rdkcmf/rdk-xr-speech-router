@@ -40,6 +40,11 @@ libxrsr_la_CFLAGS  += -DWS_ENABLED
 libxrsr_la_LDFLAGS += -lnopoll
 endif
 
+if SDT_ENABLED
+libxrsr_la_SOURCES += xrsr_protocol_sdt.c
+libxrsr_la_CFLAGS  += -DSDT_ENABLED
+endif
+
 BUILT_SOURCES = xrsr_version.h xrsr_config.h xrsr_config.json
 CLEANFILES    = xrsr_version.h xrsr_config.h xrsr_config.json
 

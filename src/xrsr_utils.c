@@ -103,6 +103,7 @@ const char *xrsr_protocol_str(xrsr_protocol_t type) {
       case XRSR_PROTOCOL_HTTPS:   return("HTTPS");
       case XRSR_PROTOCOL_WS:      return("WS");
       case XRSR_PROTOCOL_WSS:     return("WSS");
+      case XRSR_PROTOCOL_SDT:     return("SDT");
       case XRSR_PROTOCOL_INVALID: return("INVALID");
    }
    return(xrsr_invalid_return(type));
@@ -260,6 +261,10 @@ bool xrsr_url_parse(const char *url, xrsr_url_parts_t *url_parts) {
       tmp_prot = XRSR_PROTOCOL_HTTP;
       tmp_port = 80;
       index = 7;
+   } else if(0 == strncmp(tmp_url, "sdt://", 6)) {
+      tmp_prot = XRSR_PROTOCOL_SDT;
+      tmp_port = 80;
+      index = 6;
    } else {
       XLOGD_WARN("invalid protocol");
       #ifdef USE_CURL_UNESCAPE

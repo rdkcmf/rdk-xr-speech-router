@@ -121,7 +121,8 @@ typedef enum {
    XRSR_PROTOCOL_HTTPS   = 1, ///< Secure hypertext transfer protocol
    XRSR_PROTOCOL_WS      = 2, ///< Websockets protocol
    XRSR_PROTOCOL_WSS     = 3, ///< Secure websockets protocol
-   XRSR_PROTOCOL_INVALID = 4, ///< An invalid protocol
+   XRSR_PROTOCOL_SDT     = 4, ///< SDT Protocol
+   XRSR_PROTOCOL_INVALID = 5, ///< An invalid protocol
 } xrsr_protocol_t;
 
 /// @brief XRSR receive message types
@@ -218,11 +219,20 @@ typedef struct {
    uint32_t            keyword_duration;                  ///< Duration of keyword, in samples
 } xrsr_session_configuration_ws_t;
 
+/// @brief XRSR SDT session configuration structure
+/// @details The SDT session configuration data structure provide detailed information to be used in a connectioN.
+typedef struct {
+   uuid_t              uuid;                              ///< Session's universally unique identifier
+   xrsr_audio_format_t format;                            ///< Outgoing audio format
+   bool                user_initiated;                    ///< Indicates whether the session was initiated directly by the user (ie. pressing a button)
+} xrsr_session_configuration_sdt_t;
+
 /// @brief XRSR session configuration structure
 /// @details The session configuration data structure provides detailed information to be used in a speech router session.
 typedef union {
    xrsr_session_configuration_http_t http; ///< HTTP session configuration
    xrsr_session_configuration_ws_t   ws;   ///< Websockets session configuration
+   xrsr_session_configuration_sdt_t  sdt;   ///< SDT session configuration
 } xrsr_session_configuration_t;
 
 /// @brief XRSR audio stats structure
@@ -368,6 +378,13 @@ typedef bool (*xrsr_handler_recv_msg_t)(void *data, xrsr_recv_msg_t type, const 
 /// @return The function has no return value.
 typedef void (*xrsr_thread_poll_func_t)(void);
 
+/// @brief XRSR send audio handler
+/// @details Callback function prototype for handling send audio data.
+/// @param[out] buffer A pointer to the audio data.
+/// @param[out] length The length of the audio data (in bytes).
+/// @return The function returns true if successful or false otherwise.
+typedef int (*xrsr_handler_stream_audio_t)(unsigned char* buffer,uint32_t length);
+
 /// @}
 
 /// @addtogroup XRSR_STRUCTS
@@ -383,6 +400,7 @@ typedef struct {
    xrsr_handler_session_end_t   session_end;   ///< Called when a session ends
    xrsr_handler_stream_begin_t  stream_begin;  ///< Called when a session's audio stream begins
    xrsr_handler_stream_kwd_t    stream_kwd;    ///< Called when they keyword is passed in the stream
+   xrsr_handler_stream_audio_t  stream_audio;   ///< Called when the protocol streaming the audio to destinatio
    xrsr_handler_stream_end_t    stream_end;    ///< Called when a sessino's audio stream ends
    xrsr_handler_source_error_t  source_error;  ///< Called when an error occurs with the input source
    xrsr_handler_connected_t     connected;     ///< Called when the protocol connects to the server

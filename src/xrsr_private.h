@@ -235,6 +235,10 @@ typedef void (*xrsr_timer_handler_t)(void *data);
 #include <xrsr_protocol_http.h>
 #endif
 
+#ifdef SDT_ENABLED
+#include "xrsr_protocol_sdt.h"
+#endif
+
 #include <xrsr_utils.h>
 
 bool xrsr_message_queue_open(int *msgq, size_t msgsize);

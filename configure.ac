@@ -58,6 +58,15 @@ AC_ARG_ENABLE([xrsr_ws],
 esac],[xrsr_ws=false])
 AM_CONDITIONAL([WS_ENABLED], [test x$xrsr_ws = xtrue])
 
+AC_ARG_ENABLE([xrsr_sdt],
+[  --enable-xrsr_sdt    Turn on SDT support],
+[case "${enableval}" in
+  yes) xrsr_sdt=true ;;
+  no)  xrsr_sdt=false ;;
+  *) AC_MSG_ERROR([bad value ${enableval} for --enable-xrsr_sdt]) ;;
+esac],[xrsr_sdt=false])
+AM_CONDITIONAL([SDT_ENABLED], [test x$xrsr_sdt = xtrue])
+
 AC_ARG_VAR(VSDK_UTILS_JSON_TO_HEADER, script to create header from json object)
 AC_ARG_VAR(VSDK_UTILS_JSON_COMBINE,   script to combine multiple json files)
 

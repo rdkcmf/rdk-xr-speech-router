@@ -54,6 +54,9 @@ typedef union {
    #ifdef HTTP_ENABLED
    xrsr_state_http_t   http;
    #endif
+   #ifdef SDT_ENABLED
+   xrsr_state_sdt_t  sdt;
+   #endif
 } xrsr_conn_state_t;
 
 typedef struct {
@@ -788,6 +791,22 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
             break;
          }
          #endif
+         #ifdef SDT_ENABLED
+         case XRSR_PROTOCOL_SDT: {
+           dst_int->handler = xrsr_protocol_handler_sdt;
+           xrsr_sdt_params_t params;
+           params.prot               = url_parts.prot;
+           params.host_name          = host_name;
+           params.timer_obj          = state->timer_obj;
+
+
+            if(!xrsr_sdt_init(&dst_int->conn_state.sdt, &params)) {
+               XLOGD_ERROR("xrsr sdt init failed");
+               return;
+            }
+            break;
+         }
+         #endif
          default: {
             XLOGD_ERROR("invalid protocol <%s>", xrsr_protocol_str(url_parts.prot));
             xrsr_url_free(&url_parts);
@@ -1063,6 +1082,16 @@ void *xrsr_thread_main(void *param) {
                   break;
                }
                #endif
+               #ifdef SDT_ENABLED
+               case XRSR_PROTOCOL_SDT: {
+                  xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+                  if(xrsr_sdt_is_established(sdt)) {
+                     xrsr_sdt_fd_set(sdt, &nfds, &rfds, &wfds, NULL);
+                  }
+                  break;
+               }
+               #endif
+
                default: {
                   break;
                }
@@ -1147,6 +1176,16 @@ void *xrsr_thread_main(void *param) {
                   break;
                }
                #endif
+               #ifdef SDT_ENABLED
+               case XRSR_PROTOCOL_SDT: {
+                  xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+                  if(!xrsr_sdt_is_disconnected(sdt)) {
+                     xrsr_sdt_handle_fds(sdt, &rfds, &wfds, NULL);
+                  }
+                  break;
+               }
+               #endif
+
                default: {
                   break;
                }
@@ -1176,6 +1215,14 @@ void *xrsr_thread_main(void *param) {
                break;
             }
             #endif
+            #ifdef SDT_ENABLED
+            case XRSR_PROTOCOL_SDT: {
+               xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+               xrsr_sdt_term(sdt);
+               break;
+            }
+            #endif
+
             default: {
                break;
             }
@@ -1431,6 +1478,13 @@ void xrsr_msg_xraudio_event(const xrsr_thread_params_t *params, xrsr_thread_stat
                break;
             }
             #endif
+            #ifdef SDT_ENABLED
+            case XRSR_PROTOCOL_SDT: {
+               xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+               xrsr_sdt_handle_speech_event(sdt, &event->event);
+               break;
+            }
+            #endif
             default: {
                break;
             }
@@ -1634,6 +1688,55 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             break;
          }
          #endif
+
+         #ifdef SDT_ENABLED
+         case XRSR_PROTOCOL_SDT: {
+            xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+            if(xrsr_sdt_is_disconnected(sdt)){
+               xrsr_session_configuration_sdt_t *session_config = &sdt->session_configuration.sdt;
+               uuid_generate(session_config->uuid);
+               sdt->stream_time_min_rxd = false;
+               
+               char uuid_str[37] = {'\0'};
+               uuid_unparse_lower(session_config->uuid, uuid_str);
+
+               session_config->format = xrsr_audio_format_get(dst->format, begin->xraudio_format);
+
+               XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
+
+               // Set the handlers based on source
+               sdt->handlers  = dst->handlers;
+               sdt->dst_index = dst_index;
+
+               // Call session begin handler
+               session_config->user_initiated = begin->user_initiated;
+
+               int pipe_fd_read = -1;
+               if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
+                  XLOGD_ERROR("xrsr_speech_stream_begin failed");
+                  // perform clean up of the session
+                  xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
+                  break;
+               } else {
+                  sdt->audio_pipe_fd_read = pipe_fd_read;
+               }
+               
+               bool deferred = (dst->stream_time_min == 0) ? false : !sdt->stream_time_min_rxd;
+
+               if(!xrsr_sdt_connect(sdt, &dst->url_parts, g_xrsr.src, begin->xraudio_format, begin->user_initiated, begin->retry, deferred, NULL, NULL)) {
+                  XLOGD_ERROR("sdt connect");
+               }
+            } else if(xrsr_sdt_is_established(sdt)) {
+               XLOGD_INFO("sdt session continue");
+               if(!xrsr_sdt_audio_stream(sdt, g_xrsr.src)) {
+                  XLOGD_ERROR("sdt audio stream");
+               }
+            } else {
+               XLOGD_ERROR("invalid state");
+            }
+           break;
+         }
+         #endif
          default: {
             XLOGD_ERROR("invalid protocol <%s>", xrsr_protocol_str(prot));
             return;
@@ -1700,6 +1803,15 @@ void xrsr_session_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, u
             break;
          }
          #endif
+         #ifdef SDT_ENABLED
+         case XRSR_PROTOCOL_SDT: {
+            xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+            if(!xrsr_sdt_is_disconnected(sdt)) {
+               session_in_progress = true;
+            }
+            break;
+         }
+         #endif
          default: {
          }
       }
@@ -1743,6 +1855,15 @@ void xrsr_msg_session_terminate(const xrsr_thread_params_t *params, xrsr_thread_
             xrsr_state_ws_t *ws = &dst->conn_state.ws;
             if(!xrsr_ws_is_disconnected(ws)) {
                xrsr_ws_terminate(ws);
+            }
+            break;
+         }
+         #endif
+         #ifdef SDT_ENABLED
+         case XRSR_PROTOCOL_SDT: {
+            xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
+            if(!xrsr_sdt_is_disconnected(sdt)) {
+               xrsr_sdt_terminate(sdt);
             }
             break;
          }
@@ -1867,6 +1988,28 @@ void xrsr_msg_privacy_mode_get(const xrsr_thread_params_t *params, xrsr_thread_s
       sem_post(privacy_mode_get->semaphore);
    }
 }
+void xrsr_send_stream_data(xrsr_src_t src, uint8_t *buffer, uint32_t size)
+{
+  if((uint32_t)src >= (uint32_t)XRSR_SRC_INVALID) {
+     XLOGD_ERROR("invalid source <%s>", xrsr_src_str(src));
+     return;
+   }
+
+   for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
+      xrsr_dst_int_t *dst = &g_xrsr.routes[src].dsts[dst_index];
+
+      if(dst->handler == NULL) {
+         if(dst_index == 0) {
+            XLOGD_ERROR("no handler for source <%s>", xrsr_src_str(src));
+         }
+         return;
+      }
+      // Call source send audio handler
+      if(dst->handlers.stream_audio != NULL) {
+         (*dst->handlers.stream_audio)(buffer,size);
+      }
+   }
+}
 
 void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result) {
    if((uint32_t)src >= (uint32_t)XRSR_SRC_INVALID) {
@@ -1925,6 +2068,13 @@ xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length
       case XRSR_PROTOCOL_HTTPS: {
          xrsr_state_http_t *http = (xrsr_state_http_t *)param;
          xrsr_http_send(http, buffer, length);
+         break;
+      }
+      #endif
+      #ifdef SDT_ENABLED
+      case XRSR_PROTOCOL_SDT: {
+        xrsr_state_sdt_t *sdt = (xrsr_state_sdt_t *)param;
+        xrsr_sdt_send_text(sdt, buffer, length);
          break;
       }
       #endif
