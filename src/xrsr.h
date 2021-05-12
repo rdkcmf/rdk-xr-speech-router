@@ -497,10 +497,11 @@ bool xrsr_session_keyword_info_set(xrsr_src_t src, uint32_t keyword_begin, uint3
 
 /// @brief Starts the speech router capture session
 /// @details Starts capturing audio streams for local sources.
-/// @param[in] container Indicates the container for capturing audio streams.
-/// @param[in] file_path Indicates the full path and capture file name prefix (ie "/opt/logs/capture_")
+/// @param[in] container      Indicates the container for capturing audio streams.
+/// @param[in] file_path      Indicates the full path and capture file name prefix (ie "/opt/logs/capture_")
+/// @param[in] raw_mic_enable Enables capture of raw microphone input audio data
 /// @return The function returns true if successful or false otherwise.
-bool xrsr_session_capture_start(xrsr_audio_container_t container, const char *file_path);
+bool xrsr_session_capture_start(xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable);
 
 /// @brief Stops the speech router capture session
 /// @details Stops capturing audio streams for local sources.

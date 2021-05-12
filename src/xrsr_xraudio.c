@@ -752,7 +752,7 @@ void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj) {
    }
 }
 
-void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path) {
+void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
@@ -760,11 +760,11 @@ void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio
       return;
    }
 
-   XLOGD_INFO("container <%s> file path <%s>", xrsr_audio_container_str(container), file_path);
+   XLOGD_INFO("container <%s> file path <%s> raw mic enable <%d>", xrsr_audio_container_str(container), file_path, raw_mic_enable);
 
    xraudio_capture_t capture = XRAUDIO_CAPTURE_INPUT_ALL | XRAUDIO_CAPTURE_KWD | XRAUDIO_CAPTURE_EOS | XRAUDIO_CAPTURE_DGA | XRAUDIO_CAPTURE_OUTPUT;
 
-   xraudio_result_t result = xraudio_capture_to_file_start(obj->xraudio_obj, capture, (container == XRSR_AUDIO_CONTAINER_WAV) ? XRAUDIO_CONTAINER_WAV : XRAUDIO_CONTAINER_NONE, file_path, NULL, NULL);
+   xraudio_result_t result = xraudio_capture_to_file_start(obj->xraudio_obj, capture, (container == XRSR_AUDIO_CONTAINER_WAV) ? XRAUDIO_CONTAINER_WAV : XRAUDIO_CONTAINER_NONE, file_path, raw_mic_enable, NULL, NULL);
 
    if(XRAUDIO_RESULT_OK != result) {
       XLOGD_ERROR("xraudio_capture_to_file_start returned <%s>", xraudio_result_str(result));

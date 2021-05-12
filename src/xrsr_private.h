@@ -168,6 +168,7 @@ typedef struct {
    sem_t *                      semaphore;
    xrsr_audio_container_t       container;
    const char *                 file_path;
+   bool                         raw_mic_enable;
 } xrsr_queue_msg_session_capture_start_t;
 
 typedef struct {
@@ -255,7 +256,7 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
 bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats);
 void xrsr_xraudio_stream_event_handler(xraudio_devices_input_t source, audio_in_callback_event_t event, xrsr_speech_event_t *speech_event);
 bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format);
-void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path);
+void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable);
 void xrsr_xraudio_session_capture_stop(xrsr_xraudio_object_t object);
 void xrsr_xraudio_thread_poll(xrsr_xraudio_object_t object, xrsr_thread_poll_func_t func);
 bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mode_t power_mode);

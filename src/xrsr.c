@@ -1110,7 +1110,7 @@ bool xrsr_session_keyword_info_set(xrsr_src_t src, uint32_t keyword_begin, uint3
    return(true);
 }
 
-bool xrsr_session_capture_start(xrsr_audio_container_t container, const char *file_path) {
+bool xrsr_session_capture_start(xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable) {
    if(!g_xrsr.opened) {
       XLOGD_ERROR("not opened");
       return(false);
@@ -1125,6 +1125,7 @@ bool xrsr_session_capture_start(xrsr_audio_container_t container, const char *fi
    msg.semaphore      = &semaphore;
    msg.container      = container;
    msg.file_path      = file_path;
+   msg.raw_mic_enable = raw_mic_enable;
 
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
    sem_wait(&semaphore);
@@ -1688,7 +1689,7 @@ void xrsr_msg_session_capture_start(const xrsr_thread_params_t *params, xrsr_thr
    xrsr_queue_msg_session_capture_start_t *capture_start = (xrsr_queue_msg_session_capture_start_t *)msg;
 
 
-   xrsr_xraudio_session_capture_start(g_xrsr.xrsr_xraudio_object, capture_start->container, capture_start->file_path);
+   xrsr_xraudio_session_capture_start(g_xrsr.xrsr_xraudio_object, capture_start->container, capture_start->file_path, capture_start->raw_mic_enable);
 
    if(capture_start->semaphore != NULL) {
       sem_post(capture_start->semaphore);
