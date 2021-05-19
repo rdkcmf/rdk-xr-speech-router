@@ -370,11 +370,12 @@ void xrsr_url_free(xrsr_url_parts_t *url_parts) {
    }
 }
 
-xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port) {
+xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port, uint8_t retrycount) {
    xrsr_address_family_t family = XRSR_ADDRESS_FAMILY_INVALID;
    struct addrinfo *result = NULL;
 
    uint8_t attempt = 1;
+
    do {
       struct addrinfo hints;
       memset(&hints, 0, sizeof(struct addrinfo));
@@ -389,7 +390,7 @@ xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port
       int rc = getaddrinfo(host, port, &hints, &result);
       if(rc == EAI_AGAIN) {
          XLOGD_WARN("getaddrinfo <%s> attempt <%u>", gai_strerror(rc), attempt);
-         if(attempt >= 5) {
+         if(attempt >= retrycount) {
             XLOGD_ERROR("getaddrinfo failed");
             return(family);
          }

@@ -41,7 +41,7 @@ const char *xrsr_curlmcode_str(CURLMcode code);
 
 bool                  xrsr_url_parse(const char *url, xrsr_url_parts_t *url_parts);
 void                  xrsr_url_free(xrsr_url_parts_t *url_parts);
-xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port);
+xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port, uint8_t retrycount);
 
 #ifdef __cplusplus
 }

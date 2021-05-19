@@ -369,7 +369,7 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
    memset(&ws->audio_stats, 0, sizeof(ws->audio_stats));
 
    if(((uint32_t)url_parts->family) >= XRSR_ADDRESS_FAMILY_INVALID) {
-      url_parts->family = xrsr_address_family_get(url_parts->host, url_parts->port_str);
+      url_parts->family = xrsr_address_family_get(url_parts->host, url_parts->port_str, 5);
       XLOGD_WARN("address family <%s>", xrsr_address_family_str(url_parts->family));
    }
 

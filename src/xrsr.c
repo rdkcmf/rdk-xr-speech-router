@@ -636,7 +636,7 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
          #ifdef WS_ENABLED
          case XRSR_PROTOCOL_WS:
          case XRSR_PROTOCOL_WSS: {
-            url_parts.family = xrsr_address_family_get(url_parts.host, url_parts.port_str);
+            url_parts.family = xrsr_address_family_get(url_parts.host, url_parts.port_str, 1);
             dst_int->handler = xrsr_protocol_handler_ws;
 
             xrsr_ws_params_t params;
