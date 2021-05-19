@@ -441,7 +441,7 @@ void xrsr_xraudio_keyword_detect_stop(xrsr_xraudio_obj_t *obj) {
    obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
 }
 
-void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg) {
+void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg, xrsr_src_t current_session_src) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
    xrsr_src_t          src = XRSR_SRC_INVALID;
    
@@ -454,7 +454,7 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
       return;
    }
    
-   XLOGD_INFO("");
+   XLOGD_DEBUG("");
    
    bool user_initiated = false;
    if(XRAUDIO_DEVICE_INPUT_LOCAL_GET(msg->source)) { // Local microphone
@@ -469,15 +469,21 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
       return;
    }
 
+   // Stop the detector
+   xrsr_xraudio_keyword_detect_stop(obj);
+
+   if((uint32_t)current_session_src < XRSR_SRC_INVALID && current_session_src != src) {
+      XLOGD_WARN("Rejecting keyword detected from source <%s>, session in progress on source <%s>.  Restarting keyword detector...", xrsr_src_str(src), xrsr_src_str(current_session_src));
+      xrsr_xraudio_keyword_detect_start(obj);   //xrsr_xraudio_keyword_detect_stop() needs to be called before this.
+      return;
+   }
+
    xraudio_keyword_detector_result_t *detector_result = NULL;
    if(msg->has_result) {
       detector_result = &msg->detector_result;
    }
 
    XLOGD_INFO("Keyword detected for source <%s>", xrsr_src_str(src));
-
-   // Stop the detector
-   xrsr_xraudio_keyword_detect_stop(obj);
 
    // Call the appropriate handler based on the source
    xrsr_session_begin(src, user_initiated, msg->xraudio_format, detector_result);

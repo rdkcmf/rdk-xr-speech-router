@@ -1295,7 +1295,7 @@ void xrsr_msg_xraudio_event(const xrsr_thread_params_t *params, xrsr_thread_stat
 
 void xrsr_msg_keyword_detected(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_keyword_detected_t *keyword_detected = (xrsr_queue_msg_keyword_detected_t *)msg;
-   xrsr_xraudio_keyword_detected(g_xrsr.xrsr_xraudio_object, keyword_detected);
+   xrsr_xraudio_keyword_detected(g_xrsr.xrsr_xraudio_object, keyword_detected, g_xrsr.src);
 }
 
 void xrsr_msg_keyword_detect_error(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {

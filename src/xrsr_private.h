@@ -250,7 +250,7 @@ void xrsr_xraudio_device_request(xrsr_xraudio_object_t object);
 void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[]);
 void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *obj, xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_config_t keyword_config);
 void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object);
-void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg);
+void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg, xrsr_src_t current_session_src);
 void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_devices_input_t source);
 bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_id, xraudio_devices_input_t source, bool user_initiated, xraudio_input_format_t *format_decoded, xraudio_dst_pipe_t dsts[], uint16_t stream_time_min, uint32_t keyword_begin, uint32_t keyword_duration, uint32_t frame_duration);
 bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats);
