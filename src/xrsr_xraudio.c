@@ -653,7 +653,7 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
    msg.event.src   = xrsr_xraudio_src_to_xrsr(source);
    switch(event) {
       case AUDIO_IN_CALLBACK_EVENT_EOS:
-      case AUDIO_IN_CALLBACK_EVENT_EOS_TIMEOUT_BEGIN:
+      case AUDIO_IN_CALLBACK_EVENT_EOS_TIMEOUT_INITIAL:
       case AUDIO_IN_CALLBACK_EVENT_EOS_TIMEOUT_END: {
          msg.event.event = XRSR_EVENT_EOS;
          if(event_param) {
