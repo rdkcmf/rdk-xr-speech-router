@@ -233,7 +233,11 @@ void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[])
       }
       switch(srcs[index]) {
          case XRSR_SRC_MICROPHONE: {
-            obj->device_input |= g_local_mic_full_power;
+            if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_LOW) {
+               obj->device_input |= XRSR_LOCAL_MIC_LOW_POWER;
+            } else {
+               obj->device_input |= g_local_mic_full_power;
+            }
             break;
          }
          case XRSR_SRC_RCU_PTT: {

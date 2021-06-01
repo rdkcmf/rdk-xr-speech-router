@@ -102,32 +102,32 @@ bool xrsr_ws_init(xrsr_state_ws_t *ws, xrsr_ws_params_t *params) {
    if(params->connect_check_interval != NULL) {
       ws->connect_check_interval = *params->connect_check_interval;
    } else {
-      ws->connect_check_interval = JSON_INT_VALUE_WS_CONNECT_CHECK_INTERVAL;
+      ws->connect_check_interval = JSON_INT_VALUE_WS_FPM_CONNECT_CHECK_INTERVAL;
    }
    if(params->timeout_connect != NULL) {
       ws->timeout_connect = *params->timeout_connect;
    } else {
-      ws->timeout_connect = JSON_INT_VALUE_WS_TIMEOUT_CONNECT;
+      ws->timeout_connect = JSON_INT_VALUE_WS_FPM_TIMEOUT_CONNECT;
    }
    if(params->timeout_inactivity != NULL) {
       ws->timeout_inactivity = *params->timeout_inactivity;
    } else {
-      ws->timeout_inactivity = JSON_INT_VALUE_WS_TIMEOUT_INACTIVITY;
+      ws->timeout_inactivity = JSON_INT_VALUE_WS_FPM_TIMEOUT_INACTIVITY;
    }
    if(params->timeout_session != NULL) {
       ws->timeout_session = *params->timeout_session;
    } else {
-      ws->timeout_session = JSON_INT_VALUE_WS_TIMEOUT_SESSION;
+      ws->timeout_session = JSON_INT_VALUE_WS_FPM_TIMEOUT_SESSION;
    }
    if(params->ipv4_fallback != NULL) {
       ws->ipv4_fallback = *params->ipv4_fallback;
    } else {
-      ws->ipv4_fallback = JSON_BOOL_VALUE_WS_IPV4_FALLBACK;
+      ws->ipv4_fallback = JSON_BOOL_VALUE_WS_FPM_IPV4_FALLBACK;
    }
    if(params->backoff_delay != NULL) {
       ws->backoff_delay = *params->backoff_delay;
    } else {
-      ws->backoff_delay = JSON_INT_VALUE_WS_BACKOFF_DELAY;
+      ws->backoff_delay = JSON_INT_VALUE_WS_FPM_BACKOFF_DELAY;
    }
 
    xrsr_ws_host_name_set(ws, params->host_name);

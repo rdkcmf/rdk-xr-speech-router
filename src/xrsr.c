@@ -120,7 +120,9 @@ typedef struct {
    bool                          first_stream_req;              // the first stream request sets up pipes for all requests
    int                           pipe_fds_rd[XRSR_DST_QTY_MAX]; // cache the read side of the pipes since the stream requests
    #ifdef WS_ENABLED
-   xrsr_ws_json_config_t         ws_json_config;
+   xrsr_ws_json_config_t         *ws_json_config;
+   xrsr_ws_json_config_t          ws_json_config_fpm;
+   xrsr_ws_json_config_t          ws_json_config_lpm;
    #endif
 } xrsr_global_t;
 
@@ -298,66 +300,135 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
       }
    }
    #ifdef WS_ENABLED
-   memset(&g_xrsr.ws_json_config, 0, sizeof(g_xrsr.ws_json_config));
-   json_t *json_obj_ws = json_object_get(json_obj_vsdk, JSON_OBJ_NAME_WS);
+   memset(&g_xrsr.ws_json_config_fpm, 0, sizeof(xrsr_ws_json_config_t));
+   memset(&g_xrsr.ws_json_config_lpm, 0, sizeof(xrsr_ws_json_config_t));
+
+   json_t *json_obj;
+   json_t *json_obj_ws     = json_object_get(json_obj_vsdk, JSON_OBJ_NAME_WS);
    if(NULL == json_obj_ws || !json_is_object(json_obj_ws)) {
       XLOGD_INFO("ws json object not found, using defaults");
    } else {
-      json_t *json_obj = json_object_get(json_obj_ws, JSON_BOOL_NAME_WS_DEBUG);
+      //"debug" shared between full and low power configs
+      json_obj = json_object_get(json_obj_ws, JSON_BOOL_NAME_WS_DEBUG);
       if(json_obj != NULL && json_is_boolean(json_obj)) {
-         g_xrsr.ws_json_config.val_debug = json_is_true(json_obj) ? true : false;
-         g_xrsr.ws_json_config.ptr_debug = &g_xrsr.ws_json_config.val_debug;
-         XLOGD_INFO("ws json: debug <%s>", g_xrsr.ws_json_config.val_debug ? "YES" : "NO");
+         g_xrsr.ws_json_config_fpm.val_debug = json_is_true(json_obj) ? true : false;
+         g_xrsr.ws_json_config_fpm.ptr_debug = &g_xrsr.ws_json_config_fpm.val_debug;
+         g_xrsr.ws_json_config_lpm.val_debug = json_is_true(json_obj) ? true : false;
+         g_xrsr.ws_json_config_lpm.ptr_debug = &g_xrsr.ws_json_config_lpm.val_debug;
+         XLOGD_INFO("ws json: debug <%s>", g_xrsr.ws_json_config_fpm.val_debug ? "YES" : "NO");
       }
-      json_obj = json_object_get(json_obj_ws, JSON_INT_NAME_WS_CONNECT_CHECK_INTERVAL);
-      if(json_obj != NULL && json_is_integer(json_obj)) {
-         json_int_t value = json_integer_value(json_obj);
-         if(value >= 0 && value <= 1000) {
-            g_xrsr.ws_json_config.val_connect_check_interval = value;
-            g_xrsr.ws_json_config.ptr_connect_check_interval = &g_xrsr.ws_json_config.val_connect_check_interval;
-            XLOGD_INFO("ws json: connect check interval <%d> ms", g_xrsr.ws_json_config.val_connect_check_interval);
+
+      json_t *json_obj_fpm = json_object_get(json_obj_ws, JSON_OBJ_NAME_WS_FPM);
+      if(NULL == json_obj_fpm || !json_is_object(json_obj_fpm)) {
+	XLOGD_INFO("fpm json object not found, using defaults");
+      } else {
+         json_obj = json_object_get(json_obj_fpm, JSON_INT_NAME_WS_FPM_CONNECT_CHECK_INTERVAL);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 1000) {
+               g_xrsr.ws_json_config_fpm.val_connect_check_interval = value;
+               g_xrsr.ws_json_config_fpm.ptr_connect_check_interval = &g_xrsr.ws_json_config_fpm.val_connect_check_interval;
+               XLOGD_INFO("ws fpm json: connect check interval <%d> ms", g_xrsr.ws_json_config_fpm.val_connect_check_interval);
+            }
+         }
+         json_obj = json_object_get(json_obj_fpm, JSON_INT_NAME_WS_FPM_TIMEOUT_CONNECT);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_fpm.val_timeout_connect = value;
+               g_xrsr.ws_json_config_fpm.ptr_timeout_connect = &g_xrsr.ws_json_config_fpm.val_timeout_connect;
+               XLOGD_INFO("ws fpm json: timeout connect <%d> ms", g_xrsr.ws_json_config_fpm.val_timeout_connect);
+            }
+         }
+         json_obj = json_object_get(json_obj_fpm, JSON_INT_NAME_WS_FPM_TIMEOUT_INACTIVITY);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_fpm.val_timeout_inactivity = value;
+               g_xrsr.ws_json_config_fpm.ptr_timeout_inactivity = &g_xrsr.ws_json_config_fpm.val_timeout_inactivity;
+               XLOGD_INFO("ws fpm json: timeout inactivity <%d> ms", g_xrsr.ws_json_config_fpm.val_timeout_inactivity);
+            }
+         }
+         json_obj = json_object_get(json_obj_fpm, JSON_INT_NAME_WS_FPM_TIMEOUT_SESSION);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_fpm.val_timeout_session = value;
+               g_xrsr.ws_json_config_fpm.ptr_timeout_session = &g_xrsr.ws_json_config_fpm.val_timeout_session;
+               XLOGD_INFO("ws fpm json: timeout session <%d> ms", g_xrsr.ws_json_config_fpm.val_timeout_session);
+            }
+         }
+         json_obj = json_object_get(json_obj_fpm, JSON_BOOL_NAME_WS_FPM_IPV4_FALLBACK);
+         if(json_obj != NULL && json_is_boolean(json_obj)) {
+            g_xrsr.ws_json_config_fpm.val_ipv4_fallback = json_is_true(json_obj) ? true : false;
+            g_xrsr.ws_json_config_fpm.ptr_ipv4_fallback = &g_xrsr.ws_json_config_fpm.val_ipv4_fallback;
+            XLOGD_INFO("ws fpm json: ipv4 fallback <%s>", g_xrsr.ws_json_config_fpm.val_ipv4_fallback ? "YES" : "NO");
+         }
+         json_obj = json_object_get(json_obj_fpm, JSON_INT_NAME_WS_FPM_BACKOFF_DELAY);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 10000) {
+               g_xrsr.ws_json_config_fpm.val_backoff_delay = value;
+               g_xrsr.ws_json_config_fpm.ptr_backoff_delay = &g_xrsr.ws_json_config_fpm.val_backoff_delay;
+               XLOGD_INFO("ws fpm json: backoff delay <%d> ms", g_xrsr.ws_json_config_fpm.val_backoff_delay);
+            }
          }
       }
-      json_obj = json_object_get(json_obj_ws, JSON_INT_NAME_WS_TIMEOUT_CONNECT);
-      if(json_obj != NULL && json_is_integer(json_obj)) {
-         json_int_t value = json_integer_value(json_obj);
-         if(value >= 0 && value <= 60000) {
-            g_xrsr.ws_json_config.val_timeout_connect = value;
-            g_xrsr.ws_json_config.ptr_timeout_connect = &g_xrsr.ws_json_config.val_timeout_connect;
-            XLOGD_INFO("ws json: timeout connect <%d> ms", g_xrsr.ws_json_config.val_timeout_connect);
+
+      json_t *json_obj_lpm = json_object_get(json_obj_ws, JSON_OBJ_NAME_WS_LPM);
+      if(NULL == json_obj_lpm || !json_is_object(json_obj_lpm)) {
+	XLOGD_INFO("lpm json object not found, using defaults");
+      } else {
+         json_obj = json_object_get(json_obj_lpm, JSON_INT_NAME_WS_LPM_CONNECT_CHECK_INTERVAL);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 1000) {
+               g_xrsr.ws_json_config_lpm.val_connect_check_interval = value;
+               g_xrsr.ws_json_config_lpm.ptr_connect_check_interval = &g_xrsr.ws_json_config_lpm.val_connect_check_interval;
+               XLOGD_INFO("ws lpm json: connect check interval <%d> ms", g_xrsr.ws_json_config_lpm.val_connect_check_interval);
+            }
          }
-      }
-      json_obj = json_object_get(json_obj_ws, JSON_INT_NAME_WS_TIMEOUT_INACTIVITY);
-      if(json_obj != NULL && json_is_integer(json_obj)) {
-         json_int_t value = json_integer_value(json_obj);
-         if(value >= 0 && value <= 60000) {
-            g_xrsr.ws_json_config.val_timeout_inactivity = value;
-            g_xrsr.ws_json_config.ptr_timeout_inactivity = &g_xrsr.ws_json_config.val_timeout_inactivity;
-            XLOGD_INFO("ws json: timeout inactivity <%d> ms", g_xrsr.ws_json_config.val_timeout_inactivity);
+         json_obj = json_object_get(json_obj_lpm, JSON_INT_NAME_WS_LPM_TIMEOUT_CONNECT);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_lpm.val_timeout_connect = value;
+               g_xrsr.ws_json_config_lpm.ptr_timeout_connect = &g_xrsr.ws_json_config_lpm.val_timeout_connect;
+               XLOGD_INFO("ws lpm json: timeout connect <%d> ms", g_xrsr.ws_json_config_lpm.val_timeout_connect);
+            }
          }
-      }
-      json_obj = json_object_get(json_obj_ws, JSON_INT_NAME_WS_TIMEOUT_SESSION);
-      if(json_obj != NULL && json_is_integer(json_obj)) {
-         json_int_t value = json_integer_value(json_obj);
-         if(value >= 0 && value <= 60000) {
-            g_xrsr.ws_json_config.val_timeout_session = value;
-            g_xrsr.ws_json_config.ptr_timeout_session = &g_xrsr.ws_json_config.val_timeout_session;
-            XLOGD_INFO("ws json: timeout session <%d> ms", g_xrsr.ws_json_config.val_timeout_session);
+         json_obj = json_object_get(json_obj_lpm, JSON_INT_NAME_WS_LPM_TIMEOUT_INACTIVITY);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_lpm.val_timeout_inactivity = value;
+               g_xrsr.ws_json_config_lpm.ptr_timeout_inactivity = &g_xrsr.ws_json_config_lpm.val_timeout_inactivity;
+               XLOGD_INFO("ws lpm json: timeout inactivity <%d> ms", g_xrsr.ws_json_config_lpm.val_timeout_inactivity);
+            }
          }
-      }
-      json_obj = json_object_get(json_obj_ws, JSON_BOOL_NAME_WS_IPV4_FALLBACK);
-      if(json_obj != NULL && json_is_boolean(json_obj)) {
-         g_xrsr.ws_json_config.val_ipv4_fallback = json_is_true(json_obj) ? true : false;
-         g_xrsr.ws_json_config.ptr_ipv4_fallback = &g_xrsr.ws_json_config.val_ipv4_fallback;
-         XLOGD_INFO("ws json: ipv4 fallback <%s>", g_xrsr.ws_json_config.val_ipv4_fallback ? "YES" : "NO");
-      }
-      json_obj = json_object_get(json_obj_ws, JSON_INT_NAME_WS_BACKOFF_DELAY);
-      if(json_obj != NULL && json_is_integer(json_obj)) {
-         json_int_t value = json_integer_value(json_obj);
-         if(value >= 0 && value <= 10000) {
-            g_xrsr.ws_json_config.val_backoff_delay = value;
-            g_xrsr.ws_json_config.ptr_backoff_delay = &g_xrsr.ws_json_config.val_backoff_delay;
-            XLOGD_INFO("ws json: backoff delay <%d> ms", g_xrsr.ws_json_config.val_backoff_delay);
+         json_obj = json_object_get(json_obj_lpm, JSON_INT_NAME_WS_LPM_TIMEOUT_SESSION);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 60000) {
+               g_xrsr.ws_json_config_lpm.val_timeout_session = value;
+               g_xrsr.ws_json_config_lpm.ptr_timeout_session = &g_xrsr.ws_json_config_lpm.val_timeout_session;
+               XLOGD_INFO("ws lpm json: timeout session <%d> ms", g_xrsr.ws_json_config_lpm.val_timeout_session);
+            }
+         }
+         json_obj = json_object_get(json_obj_lpm, JSON_BOOL_NAME_WS_LPM_IPV4_FALLBACK);
+         if(json_obj != NULL && json_is_boolean(json_obj)) {
+            g_xrsr.ws_json_config_lpm.val_ipv4_fallback = json_is_true(json_obj) ? true : false;
+            g_xrsr.ws_json_config_lpm.ptr_ipv4_fallback = &g_xrsr.ws_json_config_lpm.val_ipv4_fallback;
+            XLOGD_INFO("ws lpm json: ipv4 fallback <%s>", g_xrsr.ws_json_config_lpm.val_ipv4_fallback ? "YES" : "NO");
+         }
+         json_obj = json_object_get(json_obj_lpm, JSON_INT_NAME_WS_LPM_BACKOFF_DELAY);
+         if(json_obj != NULL && json_is_integer(json_obj)) {
+            json_int_t value = json_integer_value(json_obj);
+            if(value >= 0 && value <= 10000) {
+               g_xrsr.ws_json_config_lpm.val_backoff_delay = value;
+               g_xrsr.ws_json_config_lpm.ptr_backoff_delay = &g_xrsr.ws_json_config_lpm.val_backoff_delay;
+               XLOGD_INFO("ws lpm json: backoff delay <%d> ms", g_xrsr.ws_json_config_lpm.val_backoff_delay);
+            }
          }
       }
    }
@@ -366,9 +437,18 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
    xraudio_power_mode_t xraudio_power_mode;
 
    switch(power_mode) {
-      case XRSR_POWER_MODE_FULL:  xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;  break;
-      case XRSR_POWER_MODE_LOW:   xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;   break;
-      case XRSR_POWER_MODE_SLEEP: xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP; break;
+      case XRSR_POWER_MODE_FULL:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;
+         g_xrsr.ws_json_config = &g_xrsr.ws_json_config_fpm;
+         break;
+      case XRSR_POWER_MODE_LOW:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;
+         g_xrsr.ws_json_config = &g_xrsr.ws_json_config_lpm;
+         break;
+      case XRSR_POWER_MODE_SLEEP:
+         xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP;
+         g_xrsr.ws_json_config = &g_xrsr.ws_json_config_lpm;
+         break;
       default:
          XLOGD_ERROR("Invalid power mode");
          return(false);
@@ -654,13 +734,13 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
                params.ipv4_fallback          = &dst->params->ipv4_fallback;
                params.backoff_delay          = &dst->params->backoff_delay;
             } else { // use json params
-               params.debug                  = g_xrsr.ws_json_config.ptr_debug;
-               params.connect_check_interval = g_xrsr.ws_json_config.ptr_connect_check_interval;
-               params.timeout_connect        = g_xrsr.ws_json_config.ptr_timeout_connect;
-               params.timeout_inactivity     = g_xrsr.ws_json_config.ptr_timeout_inactivity;
-               params.timeout_session        = g_xrsr.ws_json_config.ptr_timeout_session;
-               params.ipv4_fallback          = g_xrsr.ws_json_config.ptr_ipv4_fallback;
-               params.backoff_delay          = g_xrsr.ws_json_config.ptr_backoff_delay;
+               params.debug                  = g_xrsr.ws_json_config->ptr_debug;
+               params.connect_check_interval = g_xrsr.ws_json_config->ptr_connect_check_interval;
+               params.timeout_connect        = g_xrsr.ws_json_config->ptr_timeout_connect;
+               params.timeout_inactivity     = g_xrsr.ws_json_config->ptr_timeout_inactivity;
+               params.timeout_session        = g_xrsr.ws_json_config->ptr_timeout_session;
+               params.ipv4_fallback          = g_xrsr.ws_json_config->ptr_ipv4_fallback;
+               params.backoff_delay          = g_xrsr.ws_json_config->ptr_backoff_delay;
             }
 
             if(!xrsr_ws_init(&dst_int->conn_state.ws, &params)) {
@@ -820,6 +900,10 @@ bool xrsr_power_mode_set(xrsr_power_mode_t power_mode) {
 
    if(result) {
       g_xrsr.power_mode = power_mode;
+
+      #ifdef WS_ENABLED
+      g_xrsr.ws_json_config = (XRSR_POWER_MODE_LOW==power_mode) ? &g_xrsr.ws_json_config_lpm : &g_xrsr.ws_json_config_fpm;
+      #endif
    }
 
    return(result);
