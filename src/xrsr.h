@@ -476,6 +476,12 @@ bool xrsr_power_mode_set(xrsr_power_mode_t power_mode);
 /// @return The function returns true if successful or false otherwise.
 bool xrsr_privacy_mode_set(bool enable);
 
+/// @brief Get HAL privacy state
+/// @details Given a boolean pointer, gets HAL mic mute state
+/// @param[in] type bool pointer
+/// @return The function returns true if successful or false otherwise
+bool xrsr_privacy_mode_get(bool *enabled);
+
 /// @brief Sets the speech router routing table
 /// @details Replaces the speech routing information.
 /// @param[in] routes Array of routes.  The last entry must contain a src value of XRSR_SRC_INVALID.

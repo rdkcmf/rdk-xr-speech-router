@@ -891,3 +891,24 @@ bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable)
    return(true);
 }
 
+bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled) {
+   xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
+
+   if(!xrsr_xraudio_object_is_valid(obj)) {
+      XLOGD_ERROR("invalid xrsr xraudio object");
+      return false;
+   }
+   if(enabled == NULL) {
+      XLOGD_ERROR("invalid pointer");
+      return false;
+   }
+
+   xraudio_result_t result = xraudio_privacy_mode_get(obj->xraudio_obj, obj->device_input, enabled);
+   if(XRAUDIO_RESULT_OK != result) {
+      XLOGD_ERROR("xraudio_privacy_mode_get returned <%s>", xraudio_result_str(result));
+      return false;
+   }
+
+   return true;
+}
+

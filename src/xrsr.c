@@ -137,6 +137,7 @@ static void xrsr_msg_keyword_update       (const xrsr_thread_params_t *params, x
 static void xrsr_msg_host_name_update     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_power_mode_update    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_privacy_mode_update  (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_privacy_mode_get     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_xraudio_granted      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_xraudio_revoked      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_xraudio_event        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
@@ -155,6 +156,7 @@ static const xrsr_msg_handler_t g_xrsr_msg_handlers[XRSR_QUEUE_MSG_TYPE_INVALID]
    xrsr_msg_host_name_update,
    xrsr_msg_power_mode_update,
    xrsr_msg_privacy_mode_update,
+   xrsr_msg_privacy_mode_get,
    xrsr_msg_xraudio_granted,
    xrsr_msg_xraudio_revoked,
    xrsr_msg_xraudio_event,
@@ -937,6 +939,30 @@ bool xrsr_privacy_mode_set(bool enable) {
    if(result) {
       g_xrsr.privacy_mode = enable;
    }
+
+   return(result);
+}
+
+bool xrsr_privacy_mode_get(bool *enabled) {
+   if(!g_xrsr.opened) {
+      XLOGD_ERROR("not opened");
+      return(false);
+   }
+
+   bool result = false;
+   sem_t semaphore;
+   sem_init(&semaphore, 0, 0);
+
+   // Get the privacy mode
+   xrsr_queue_msg_privacy_mode_get_t msg;
+   msg.header.type = XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET;
+   msg.semaphore   = &semaphore;
+   msg.enabled     = enabled;
+   msg.result      = &result;
+
+   xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+   sem_wait(&semaphore);
+   sem_destroy(&semaphore);
 
    return(result);
 }
@@ -1788,6 +1814,19 @@ void xrsr_msg_session_capture_stop(const xrsr_thread_params_t *params, xrsr_thre
 
    if(capture_stop->semaphore != NULL) {
       sem_post(capture_stop->semaphore);
+   }
+}
+
+void xrsr_msg_privacy_mode_get(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
+   xrsr_queue_msg_privacy_mode_get_t *privacy_mode_get = (xrsr_queue_msg_privacy_mode_get_t *)msg;
+
+   bool result = xrsr_xraudio_privacy_mode_get(g_xrsr.xrsr_xraudio_object, privacy_mode_get->enabled);
+
+   if(privacy_mode_get->semaphore != NULL) {
+      if(privacy_mode_get->result != NULL) {
+         *(privacy_mode_get->result) = result;
+      }
+      sem_post(privacy_mode_get->semaphore);
    }
 }
 

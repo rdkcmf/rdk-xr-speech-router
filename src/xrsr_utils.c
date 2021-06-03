@@ -69,6 +69,7 @@ const char *xrsr_queue_msg_type_str(xrsr_queue_msg_type_t type) {
       case XRSR_QUEUE_MSG_TYPE_HOST_NAME_UPDATE:      return("HOST_NAME_UPDATE");
       case XRSR_QUEUE_MSG_TYPE_POWER_MODE_UPDATE:     return("POWER_MODE_UPDATE");
       case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_UPDATE:   return("PRIVACY_MODE_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET:      return("PRIVACY_MODE_GET");
       case XRSR_QUEUE_MSG_TYPE_XRAUDIO_GRANTED:       return("XRAUDIO_GRANT");
       case XRSR_QUEUE_MSG_TYPE_XRAUDIO_REVOKED:       return("XRAUDIO_REVOKE");
       case XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT:         return("XRAUDIO_EVENT");
