@@ -28,9 +28,6 @@
 
 #define FRAME_GROUP_SIZE_MAX (4096)
 
-//This define assumes that low power always uses only one mic. Which is the case for now and seems very likely for the future. If we need to change it later, we will
-#define XRSR_LOCAL_MIC_LOW_POWER (XRAUDIO_DEVICE_INPUT_SINGLE)
-
 typedef struct {
    uint32_t                      identifier;
    xraudio_object_t              xraudio_obj;
@@ -62,6 +59,7 @@ static void xrsr_audio_stats_clear(xrsr_xraudio_obj_t *obj);
 static void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj);
 
 static xraudio_devices_input_t g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
+static xraudio_devices_input_t g_local_mic_low_power  = XRAUDIO_DEVICE_INPUT_NONE;
 
 xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_config_t keyword_config, xraudio_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_xraudio) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)malloc(sizeof(xrsr_xraudio_obj_t));
@@ -234,7 +232,7 @@ void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[])
       switch(srcs[index]) {
          case XRSR_SRC_MICROPHONE: {
             if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_LOW) {
-               obj->device_input |= XRSR_LOCAL_MIC_LOW_POWER;
+               obj->device_input |= g_local_mic_low_power;
             } else {
                obj->device_input |= g_local_mic_full_power;
             }
@@ -756,7 +754,12 @@ void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj) {
 
    for (int i = 0; i < XRAUDIO_INPUT_MAX_DEVICE_QTY; i++) {
       if (XRAUDIO_DEVICE_INPUT_LOCAL_GET(obj->available_inputs[i]) != XRAUDIO_DEVICE_INPUT_NONE) {
-         g_local_mic_full_power = obj->available_inputs[i] & ~XRSR_LOCAL_MIC_LOW_POWER;
+         g_local_mic_low_power = XRAUDIO_DEVICE_INPUT_SINGLE;
+         //This assumes that low power uses a single mic, which is the case and likely to remain so, but may need to be revisited later.
+         if(obj->available_inputs[i] != XRAUDIO_DEVICE_INPUT_SINGLE) {
+            //If we have only one mic, use it. If more than one use the multi for full power
+            g_local_mic_full_power = obj->available_inputs[i] & ~XRAUDIO_DEVICE_INPUT_SINGLE;
+         }
          break;
       }
    }
@@ -820,20 +823,20 @@ bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mod
    switch(power_mode) {
       case XRSR_POWER_MODE_FULL:
          xraudio_power_mode = XRAUDIO_POWER_MODE_FULL;
-         obj->device_input  &= ~XRSR_LOCAL_MIC_LOW_POWER;
-         obj->device_input  |= g_local_mic_full_power;
+         obj->device_input  &= ~g_local_mic_low_power;
+         obj->device_input  |=  g_local_mic_full_power;
          break;
 
       case XRSR_POWER_MODE_LOW:
          xraudio_power_mode = XRAUDIO_POWER_MODE_LOW;
          obj->device_input  &= ~g_local_mic_full_power;
-         obj->device_input  |= XRSR_LOCAL_MIC_LOW_POWER;
+         obj->device_input  |=  g_local_mic_low_power;
          break;
 
       case XRSR_POWER_MODE_SLEEP:
          xraudio_power_mode = XRAUDIO_POWER_MODE_SLEEP;
          obj->device_input  &= ~g_local_mic_full_power;
-         obj->device_input  |= XRSR_LOCAL_MIC_LOW_POWER;
+         obj->device_input  |=  g_local_mic_low_power;
          break;
 
       default: {
