@@ -260,12 +260,14 @@ typedef struct {
 /// @brief XRSR keyword detector result structure
 /// @details The keyword detector result data structure returned in the session begin callback function.
 typedef struct {
-   float    score;            ///< Confidence score from the keyword detection event in percent (0-100)
-   float    snr;              ///< Signal to noise ration in DB (from -100 to +100)
-   uint16_t doa;              ///< Angular direction of arrival in degrees (0-359)
-   int32_t  offset_buf_begin; ///< Negative offset in samples to the beginning of audio buffer
-   int32_t  offset_kwd_begin; ///< Negative offset in samples to the keyword begin point
-   int32_t  offset_kwd_end;   ///< Negative offset in samples to the keyword end point
+   float        score;            ///< Confidence score from the keyword detection event in percent (0-100)
+   float        snr;              ///< Signal to noise ration in DB (from -100 to +100)
+   uint16_t     doa;              ///< Angular direction of arrival in degrees (0-359)
+   int32_t      offset_buf_begin; ///< Negative offset in samples to the beginning of audio buffer
+   int32_t      offset_kwd_begin; ///< Negative offset in samples to the keyword begin point
+   int32_t      offset_kwd_end;   ///< Negative offset in samples to the keyword end point
+   const char * detector_name;    ///< Name of keyword detector that triggered
+   const char * dsp_name;         ///< Name of DSP preprocessing in use
 } xrsr_keyword_detector_result_t;
 
 /// @brief XRSR destination params structure

@@ -1457,6 +1457,8 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          detector_result.offset_buf_begin = begin->detector_result.endpoints.pre;
          detector_result.offset_kwd_begin = begin->detector_result.endpoints.begin;
          detector_result.offset_kwd_end   = begin->detector_result.endpoints.end;
+         detector_result.detector_name    = begin->detector_result.detector_name;
+         detector_result.dsp_name         = begin->detector_result.dsp_name;
 
          detector_result_ptr   = &detector_result;
 
