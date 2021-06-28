@@ -57,6 +57,7 @@ typedef union {
 } xrsr_conn_state_t;
 
 typedef struct {
+   bool                         initialized;
    xrsr_url_parts_t             url_parts;
    xrsr_route_handler_t         handler;
    xrsr_handlers_t              handlers;
@@ -258,6 +259,8 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
       XLOGD_ERROR("invalid power mode <%s>", xrsr_power_mode_str(power_mode));
       return(false);
    }
+
+   memset(g_xrsr.routes, 0, sizeof(g_xrsr.routes));
 
    uint32_t index = 0;
    do {
@@ -630,8 +633,39 @@ void xrsr_route_free_all(void) {
 
 void xrsr_route_free(xrsr_src_t src) {
    for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
-      g_xrsr.routes[src].dsts[index].handler  = NULL;
-      xrsr_url_free(&g_xrsr.routes[src].dsts[index].url_parts);
+      xrsr_dst_int_t *dst = &g_xrsr.routes[src].dsts[index];
+
+      if(dst->initialized) {
+         switch(dst->url_parts.prot) {
+            #ifdef HTTP_ENABLED
+            case XRSR_PROTOCOL_HTTP:
+            case XRSR_PROTOCOL_HTTPS: {
+               xrsr_http_term(&dst->conn_state.http);
+               dst->initialized = false;
+               break;
+            }
+            #endif
+            #ifdef WS_ENABLED
+            case XRSR_PROTOCOL_WS:
+            case XRSR_PROTOCOL_WSS: {
+               xrsr_ws_term(&dst->conn_state.ws);
+               dst->initialized = false;
+               break;
+            }
+            #endif
+            #ifdef SDT_ENABLED
+            case XRSR_PROTOCOL_SDT: {
+               xrsr_sdt_term(&dst->conn_state.sdt);
+               break;
+            }
+            #endif
+            default: {
+               break;
+            }
+         }
+      }
+      dst->handler  = NULL;
+      xrsr_url_free(&dst->url_parts);
    }
 }
 
@@ -712,6 +746,7 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
                XLOGD_ERROR("http init");
                return;
             }
+            dst_int->initialized = true;
             break;
          }
          #endif
@@ -749,6 +784,7 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
                XLOGD_ERROR("ws init");
                return;
             }
+            dst_int->initialized = true;
             break;
          }
          #endif

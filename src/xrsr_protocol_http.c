@@ -283,13 +283,17 @@ void xrsr_http_term(xrsr_state_http_t *http) {
         return;
     }
 
-    // First check if it has a reference to global http object
-    g_http.ref--;
-    // Check if global http is still needed
-    if(g_http.ref == 0) {
-        if(g_http.multi_handle) {
-            curl_multi_cleanup(g_http.multi_handle);
-            g_http.multi_handle = NULL;
+    xrsr_http_event(http, SM_EVENT_TERMINATE, false);
+
+    if(g_http.ref > 0) {
+        // First check if it has a reference to global http object
+        g_http.ref--;
+        // Check if global http is still needed
+        if(g_http.ref == 0) {
+            if(g_http.multi_handle) {
+                curl_multi_cleanup(g_http.multi_handle);
+                g_http.multi_handle = NULL;
+            }
         }
     }
 }

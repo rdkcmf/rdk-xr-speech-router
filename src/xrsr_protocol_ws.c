@@ -168,7 +168,7 @@ void xrsr_ws_term(xrsr_state_ws_t *ws) {
       XLOGD_WARN("ws context reference count <%d>", nopoll_ctx_ref_count(ws->obj_ctx));
    }
    
-   xrsr_ws_clear_msg_out(ws);
+   xrsr_ws_event(ws, SM_EVENT_TERMINATE, false);
    sem_destroy(&ws->msg_out_semaphore);
 
    nopoll_ctx_unref(ws->obj_ctx);
