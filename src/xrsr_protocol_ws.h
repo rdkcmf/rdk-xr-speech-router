@@ -99,7 +99,7 @@ typedef struct {
    bool                         detect_resume;
 } xrsr_state_ws_t;
 
-void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result);
+void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 bool xrsr_ws_init(xrsr_state_ws_t *ws, xrsr_ws_params_t *params);
 void xrsr_ws_term(xrsr_state_ws_t *ws);
 void xrsr_ws_host_name_set(xrsr_state_ws_t *ws, const char *host_name);

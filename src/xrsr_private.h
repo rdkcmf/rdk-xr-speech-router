@@ -157,6 +157,7 @@ typedef struct {
    bool                              has_result;
    xraudio_keyword_detector_result_t detector_result;
    rdkx_timestamp_t                  timestamp;
+   char                              transcription_in[XRSR_SESSION_BY_TEXT_MAX_LENGTH];
 } xrsr_queue_msg_session_begin_t;
 
 typedef struct {
@@ -221,7 +222,7 @@ typedef union {
 
 typedef void *xrsr_xraudio_object_t;
 
-typedef void (*xrsr_route_handler_t)(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result);
+typedef void (*xrsr_route_handler_t)(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 typedef void (*xrsr_timer_handler_t)(void *data);
 
 
@@ -268,7 +269,7 @@ void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_dev
 bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_id, xraudio_devices_input_t source, bool user_initiated, xraudio_input_format_t *format_decoded, xraudio_dst_pipe_t dsts[], uint16_t stream_time_min, uint32_t keyword_begin, uint32_t keyword_duration, uint32_t frame_duration);
 bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats);
 void xrsr_xraudio_stream_event_handler(xraudio_devices_input_t source, audio_in_callback_event_t event, xrsr_speech_event_t *speech_event);
-bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format);
+bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format, const char* transcription_in);
 void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable);
 void xrsr_xraudio_session_capture_stop(xrsr_xraudio_object_t object);
 void xrsr_xraudio_thread_poll(xrsr_xraudio_object_t object, xrsr_thread_poll_func_t func);
@@ -276,7 +277,7 @@ bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mod
 bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable);
 bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled);
 
-void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result);
+void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 void xrsr_keyword_detect_error(xrsr_src_t src);
 
 #endif

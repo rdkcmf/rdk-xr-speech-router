@@ -216,7 +216,7 @@ int _xrsr_http_timer_function(CURLM *multi, long timeout_ms, void *userp) {
 
 // END -- CURL callback functions
 
-void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result) {
+void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in) {
     // This function kicks off the session
     xrsr_queue_msg_session_begin_t msg;
     msg.header.type     = XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN;
@@ -232,6 +232,13 @@ void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated,
        msg.detector_result = *detector_result;
     }
     rdkx_timestamp_get_realtime(&msg.timestamp);
+
+    if (transcription_in != NULL) {
+       strncpy(msg.transcription_in, transcription_in, sizeof(msg.transcription_in)-1);
+       msg.transcription_in[sizeof(msg.transcription_in)-1] = '\0';
+    } else {
+        msg.transcription_in[0] = '\0';
+    }
 
     xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
 }
@@ -314,7 +321,7 @@ bool _xrsr_http_connect(xrsr_state_http_t *http) {
     return(true);
 }
 
-bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, rdkx_timer_object_t timer_obj, bool delay, const char **query_strs) {
+bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, rdkx_timer_object_t timer_obj, bool delay, const char **query_strs, const char* transcription_in) {
     char      url[XRSR_PROTOCOL_HTTP_URL_SIZE_MAX] = {'\0'};
     char      sat_token_str[24 + XRSR_SAT_TOKEN_LEN_MAX] = {'\0'};
 #ifdef URL_ENCODE
@@ -340,8 +347,18 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
     g_http.easy_handle_cnt++;
 
     // Set up HTTP header
-    http->chunk = curl_slist_append(http->chunk, "Transfer-Encoding: chunked");
-    http->chunk = curl_slist_append(http->chunk, "Content-Type:application/octet-stream");
+    if (NULL != transcription_in) {
+        http->chunk = curl_slist_append(http->chunk, "Content-Type:text/plain");
+
+        char transcription_payload[XRSR_SESSION_BY_TEXT_MAX_LENGTH];
+        snprintf(transcription_payload, sizeof(transcription_payload), "%s", transcription_in ? transcription_in : "");
+        transcription_payload[sizeof(transcription_payload)-1] = '\0';  //A bit redundant since snprintf does this, but let's be certain because CURLOPT_COPYPOSTFIELDS requires it
+        curl_easy_setopt(http->easy_handle, CURLOPT_COPYPOSTFIELDS, transcription_payload);
+    } else {
+        http->chunk = curl_slist_append(http->chunk, "Transfer-Encoding: chunked");
+        http->chunk = curl_slist_append(http->chunk, "Content-Type:application/octet-stream");
+    }
+
     if(http->session_configuration.http.sat_token[0] != '\0') {
        snprintf(sat_token_str, sizeof(sat_token_str), "Authorization: Bearer %s", http->session_configuration.http.sat_token);
        http->chunk = curl_slist_append(http->chunk, sat_token_str);

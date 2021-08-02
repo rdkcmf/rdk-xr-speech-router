@@ -209,7 +209,7 @@ void xrsr_xraudio_keyword_callback(xraudio_devices_input_t source, keyword_callb
       msg.has_result      = true;
       msg.detector_result = *detector_result;
    }
-   
+
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
 }
 
@@ -488,7 +488,7 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
    XLOGD_INFO("Keyword detected for source <%s>", xrsr_src_str(src));
 
    // Call the appropriate handler based on the source
-   xrsr_session_begin(src, user_initiated, msg->xraudio_format, detector_result);
+   xrsr_session_begin(src, user_initiated, msg->xraudio_format, detector_result, NULL);
 }
 
 void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_devices_input_t source) {
@@ -697,7 +697,7 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
 }
 
-bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format) {
+bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format, const char* transcription_in) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
@@ -714,7 +714,7 @@ bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, 
       obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
    }
 
-   xrsr_session_begin(src, true, xraudio_format, NULL);
+   xrsr_session_begin(src, true, xraudio_format, NULL, transcription_in);
 
    return(true);
 }

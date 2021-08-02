@@ -1276,8 +1276,8 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
    }
 }
 
-bool xrsr_session_request(xrsr_src_t src) {
-   if(src != XRSR_SRC_MICROPHONE) {
+bool xrsr_session_request(xrsr_src_t src, const char* transcription_in) {
+   if(transcription_in == NULL && src != XRSR_SRC_MICROPHONE) {
       XLOGD_INFO("unsupported source <%s>", xrsr_src_str(src));
       return(false);
    }
@@ -1288,7 +1288,7 @@ bool xrsr_session_request(xrsr_src_t src) {
    xraudio_format.sample_size = XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE;
    xraudio_format.channel_qty = XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY;
 
-   return(xrsr_xraudio_session_request(g_xrsr.xrsr_xraudio_object, src, xraudio_format));
+   return(xrsr_xraudio_session_request(g_xrsr.xrsr_xraudio_object, src, xraudio_format, transcription_in));
 }
 
 bool xrsr_session_keyword_info_set(xrsr_src_t src, uint32_t keyword_begin, uint32_t keyword_duration) {
@@ -1562,6 +1562,8 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
       }
    }
 
+   const char *transcription_in = (begin->transcription_in[0] == '\0') ? NULL : begin->transcription_in;
+
    for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
       xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[dst_index];
 
@@ -1603,18 +1605,19 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
 
             // Call session begin handler
             if(http->handlers.session_begin != NULL) {
-               (*http->handlers.session_begin)(http->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_configuration, &begin->timestamp);
+               (*http->handlers.session_begin)(http->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_configuration, &begin->timestamp, transcription_in);
             }
 
             if( (XRSR_SRC_MICROPHONE == g_xrsr.src) && (g_xrsr.power_mode == XRSR_POWER_MODE_LOW) ) {
-                g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
-                g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
-             }
+               g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
+               g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
+            }
 
+            bool deferred = ((dst->stream_time_min > 0) && (transcription_in == NULL)) ? true : false;
 
             if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
                XLOGD_ERROR("xrsr_speech_stream_begin failed");
-            } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, begin->xraudio_format, state->timer_obj, (dst->stream_time_min > 0 ? true : false), session_config->query_strs)) {
+            } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, begin->xraudio_format, state->timer_obj, deferred, session_config->query_strs, transcription_in)) {
                XLOGD_ERROR("http connect failed");
             } else {
                http->audio_pipe_fd_read = pipe_fd_read;
@@ -1650,7 +1653,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
 
                const char *sat_token = NULL;
                if(!begin->retry && ws->handlers.session_begin != NULL) {
-                  (*ws->handlers.session_begin)(ws->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &ws->session_configuration, &begin->timestamp);
+                  (*ws->handlers.session_begin)(ws->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &ws->session_configuration, &begin->timestamp, transcription_in);
                   if(ws->session_configuration.ws.sat_token[0] != '\0') {
                      sat_token = ws->session_configuration.ws.sat_token;
                   }
@@ -1672,7 +1675,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                   }
                }
 
-               bool deferred = (dst->stream_time_min == 0) ? false : !ws->stream_time_min_rxd;
+               bool deferred = ((dst->stream_time_min == 0) || transcription_in != NULL) ? false : !ws->stream_time_min_rxd;
 
                if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, begin->xraudio_format, begin->user_initiated, begin->retry, deferred, sat_token, session_config->query_strs)) {
                   XLOGD_ERROR("ws connect");
@@ -2011,7 +2014,7 @@ void xrsr_send_stream_data(xrsr_src_t src, uint8_t *buffer, uint32_t size)
    }
 }
 
-void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result) {
+void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char *transcription_in) {
    if((uint32_t)src >= (uint32_t)XRSR_SRC_INVALID) {
       XLOGD_ERROR("invalid source <%s>", xrsr_src_str(src));
       return;
@@ -2025,7 +2028,7 @@ void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_forma
          XLOGD_ERROR("no handler for source <%s> dst index <%u>", xrsr_src_str(src), dst_index);
          return;
       }
-      (*dst->handler)(src, false, user_initiated, xraudio_format, detector_result);
+      (*dst->handler)(src, false, user_initiated, xraudio_format, detector_result, transcription_in);
    }
 }
 

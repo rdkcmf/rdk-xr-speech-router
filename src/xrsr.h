@@ -49,11 +49,13 @@
 
 #define XRSR_VERSION_QTY_MAX (2 + RDKX_TIMER_VERSION_QTY + XRAUDIO_VERSION_QTY_MAX) ///< The quantity of version information structures.
 
-#define XRSR_SAT_TOKEN_LEN_MAX       (5120)  ///< Maximum length of the NULL-terminated SAT token string.
-#define XRSR_USER_AGENT_LEN_MAX      (256)   ///< Maximum length of the NULL-terminated user agent string.
-#define XRSR_SESSION_IP_LEN_MAX      (48)    ///< Maximum length of the NULL-terminated IP address string.
+#define XRSR_SAT_TOKEN_LEN_MAX            (5120)  ///< Maximum length of the NULL-terminated SAT token string.
+#define XRSR_USER_AGENT_LEN_MAX           (256)   ///< Maximum length of the NULL-terminated user agent string.
+#define XRSR_SESSION_IP_LEN_MAX           (48)    ///< Maximum length of the NULL-terminated IP address string.
 
-#define XRSR_DST_QTY_MAX             (2)     ///< Maximum quantity of destinations for a source
+#define XRSR_DST_QTY_MAX                  (2)     ///< Maximum quantity of destinations for a source
+
+#define XRSR_SESSION_BY_TEXT_MAX_LENGTH   (128)   ///< Maximum text string length for text-only sessions
 
 /// @}
 
@@ -315,7 +317,7 @@ typedef xrsr_result_t (*xrsr_handler_send_t)(void *param, const uint8_t *buffer,
 /// @param[in]    detector_result Results of the detection event or NULL if no detection is associated with the session
 /// @param[inout] configuration   Configuration information for the session
 /// @return The function has no return value.
-typedef void (*xrsr_handler_session_begin_t)(void *data, const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xrsr_keyword_detector_result_t *detector_result, xrsr_session_configuration_t *configuration, rdkx_timestamp_t *timestamp);
+typedef void (*xrsr_handler_session_begin_t)(void *data, const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xrsr_keyword_detector_result_t *detector_result, xrsr_session_configuration_t *configuration, rdkx_timestamp_t *timestamp, const char *transcription_in);
 
 /// @brief XRSR session end handler
 /// @details Callback function prototype for handling session end events.
@@ -511,8 +513,9 @@ bool xrsr_route(const xrsr_route_t routes[]);
 /// @brief Requests a speech router session
 /// @details Requests to start a session manually by user pressing a button on the device or other means.
 /// @param[in] src Source type for the session
+/// @param[in] transcription_in transcription input for a text-only session (no audio data streamed)
 /// @return The function returns true if successful or false otherwise.
-bool xrsr_session_request(xrsr_src_t src);
+bool xrsr_session_request(xrsr_src_t src, const char *transcription_in);
 
 /// @brief Sets keyword info for a speech router session
 /// @details Provides the keyword begin point and duration.

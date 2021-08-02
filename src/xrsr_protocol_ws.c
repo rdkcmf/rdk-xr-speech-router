@@ -43,7 +43,7 @@ static bool xrsr_ws_get_msg_out(xrsr_state_ws_t *ws, char **msg, uint32_t *lengt
 static void xrsr_ws_clear_msg_out(xrsr_state_ws_t *ws);
 
 // This function kicks off the session
-void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result) {
+void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in) {
    xrsr_queue_msg_session_begin_t msg;
    msg.header.type     = XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN;
    msg.src             = src;
@@ -58,6 +58,13 @@ void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, x
       msg.detector_result = *detector_result;
    }
    rdkx_timestamp_get_realtime(&msg.timestamp);
+
+   if (transcription_in != NULL) {
+      strncpy(msg.transcription_in, transcription_in, sizeof(msg.transcription_in)-1);
+      msg.transcription_in[sizeof(msg.transcription_in)-1] = '\0';
+   } else {
+      msg.transcription_in[0] = '\0';
+   }
 
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
 }

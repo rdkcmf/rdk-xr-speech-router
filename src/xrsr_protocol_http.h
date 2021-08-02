@@ -58,14 +58,14 @@ typedef struct {
    bool                         detect_resume;
 } xrsr_state_http_t;
 
-void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result);
+void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 bool xrsr_http_init(xrsr_state_http_t *http, bool debug);
 void xrsr_http_term(xrsr_state_http_t *http);
 void xrsr_http_terminate(xrsr_state_http_t *http);
 void xrsr_http_fd_set(xrsr_state_http_t *http, int size, int *nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
 void xrsr_http_handle_fds(xrsr_state_http_t *http, int size, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
 void xrsr_http_handle_speech_event(xrsr_state_http_t *http, xrsr_speech_event_t *event);
-bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, rdkx_timer_object_t object, bool delay, const char **query_strs);
+bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, rdkx_timer_object_t object, bool delay, const char **query_strs, const char* transcription_in);
 bool xrsr_http_conn_is_ready();
 int  xrsr_http_send(xrsr_state_http_t *http, const uint8_t *buffer, uint32_t length);
 int  xrsr_http_recv(xrsr_state_http_t *http, uint8_t *buffer, uint32_t length);
