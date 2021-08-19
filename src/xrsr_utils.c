@@ -31,6 +31,7 @@
 #include "xrsr_private.h"
 
 #define XRSR_INVALID_STR_LEN (24)
+#define XRSR_ADDR_RES_TIMEOUT (2)
 
 static char xrsr_invalid_str[XRSR_INVALID_STR_LEN];
 
@@ -393,23 +394,51 @@ xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port
       hints.ai_addr      = NULL;
       hints.ai_next      = NULL;
 
-      int rc = getaddrinfo(host, port, &hints, &result);
-      if(rc == EAI_AGAIN) {
-         XLOGD_WARN("getaddrinfo <%s> attempt <%u>", gai_strerror(rc), attempt);
-         if(attempt >= retrycount) {
-            XLOGD_ERROR("getaddrinfo failed");
-            return(family);
-         }
-         // Small delay then retry
-         usleep(20000);
-         attempt++;
-         continue;
-      }
+      struct gaicb req;
+      memset(&req, 0, sizeof(struct gaicb));
+      req.ar_name    = host;
+      req.ar_service = port;
+      req.ar_request = &hints;
+      req.ar_result  = NULL;
+
+      struct gaicb *reqs = &req;
+      struct gaicb const ** wait_reqs = ((struct gaicb const **)&reqs);
+
+      struct timespec timeout;
+      timeout.tv_sec  = XRSR_ADDR_RES_TIMEOUT;
+      timeout.tv_nsec = 0;
+
+      int rc = getaddrinfo_a(GAI_NOWAIT, &reqs, 1, NULL);
       if(rc != 0) {
-         XLOGD_ERROR("getaddrinfo <%s>", gai_strerror(rc));
+         XLOGD_WARN("getaddrinfo_a <%s> attempt <%u>", gai_strerror(rc), attempt);
+         goto retry;
+      }
+
+      rc = gai_suspend(wait_reqs, 1, &timeout);
+      if(rc != 0 && rc != EAI_ALLDONE) {
+         XLOGD_WARN("gai_suspend <%s> attempt <%u>", gai_strerror(rc), attempt);
+         rc = gai_cancel(&req);
+         if(rc != 0) {
+            XLOGD_ERROR("gai_cancel <%s> attempt <%u>", gai_strerror(rc), attempt);
+         }
+         goto retry;
+      }
+
+      result = req.ar_result;
+      if(result == NULL) {
+         XLOGD_ERROR("result is NULL");
+         goto retry;
+      }
+      break; // Successful lookup should break out here.
+retry:
+      if(attempt >= retrycount) {
+         XLOGD_ERROR("address resolution failed");
          return(family);
       }
-      break;
+      // Small delay then retry
+      usleep(20000);
+      attempt++;
+      continue;
    } while(1);
 
    family = XRSR_ADDRESS_FAMILY_IPV4;
