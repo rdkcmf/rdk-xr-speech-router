@@ -324,7 +324,11 @@ void xrsr_xraudio_device_granted(xrsr_xraudio_object_t object) {
       result = xraudio_open(obj->xraudio_obj, obj->xraudio_power_mode, obj->xraudio_privacy_mode, obj->device_input, obj->device_output, &format);
 
       if(XRAUDIO_RESULT_ERROR_MIC_OPEN == result) {
-         obj->device_input &= ~g_local_mic_full_power;
+         if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_FULL) {
+            obj->device_input &= ~g_local_mic_full_power;
+         } else {
+            obj->device_input &= ~g_local_mic_low_power;
+         }
          XLOGD_INFO("mic error, device_input now <%s>", xraudio_devices_input_str(obj->device_input));
          continue;
       }
