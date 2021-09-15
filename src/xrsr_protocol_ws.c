@@ -938,8 +938,9 @@ void St_Ws_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRes
                break;
             }
             case SM_EVENT_CONNECT_TIMEOUT: {
+               // After attempting to connect until connect timeout, we failed. Consider this a failure.
                ws->stream_end_reason  = XRSR_STREAM_END_REASON_DID_NOT_BEGIN;
-               ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE;
                xrsr_ws_speech_stream_end(ws, ws->stream_end_reason, ws->detect_resume);
                break;
             }
