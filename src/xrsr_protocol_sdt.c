@@ -185,11 +185,6 @@ bool xrsr_sdt_connect(xrsr_state_sdt_t *sdt, xrsr_url_parts_t *url_parts, xrsr_s
    memset(&sdt->stats, 0, sizeof(sdt->stats));
    memset(&sdt->audio_stats, 0, sizeof(sdt->audio_stats));
 
-   if(((uint32_t)url_parts->family) >= XRSR_ADDRESS_FAMILY_INVALID) {
-      url_parts->family = xrsr_address_family_get(url_parts->host, url_parts->port_str,5);
-      XLOGD_WARN("address family <%s>", xrsr_address_family_str(url_parts->family));
-   }
-
    if(!deferred) {
       xrsr_sdt_event(sdt, SM_EVENT_SESSION_BEGIN, false);
       return(true);

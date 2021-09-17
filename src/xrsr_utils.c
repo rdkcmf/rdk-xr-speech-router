@@ -31,7 +31,6 @@
 #include "xrsr_private.h"
 
 #define XRSR_INVALID_STR_LEN (24)
-#define XRSR_ADDR_RES_TIMEOUT (2)
 
 static char xrsr_invalid_str[XRSR_INVALID_STR_LEN];
 
@@ -375,82 +374,6 @@ void xrsr_url_free(xrsr_url_parts_t *url_parts) {
    if(tmp) { 
       free(tmp);
    }
-}
-
-xrsr_address_family_t xrsr_address_family_get(const char *host, const char *port, uint8_t retrycount) {
-   xrsr_address_family_t family = XRSR_ADDRESS_FAMILY_INVALID;
-   struct addrinfo *result = NULL;
-
-   uint8_t attempt = 1;
-
-   do {
-      struct addrinfo hints;
-      memset(&hints, 0, sizeof(struct addrinfo));
-      hints.ai_family    = AF_UNSPEC;   // Allow IPv4 or IPv6
-      hints.ai_socktype  = SOCK_STREAM; // Stream socket
-      hints.ai_flags     = AI_PASSIVE;  // For wildcard IP address
-      hints.ai_protocol  = 0;           // Any protocol
-      hints.ai_canonname = NULL;
-      hints.ai_addr      = NULL;
-      hints.ai_next      = NULL;
-
-      struct gaicb req;
-      memset(&req, 0, sizeof(struct gaicb));
-      req.ar_name    = host;
-      req.ar_service = port;
-      req.ar_request = &hints;
-      req.ar_result  = NULL;
-
-      struct gaicb *reqs = &req;
-      struct gaicb const ** wait_reqs = ((struct gaicb const **)&reqs);
-
-      struct timespec timeout;
-      timeout.tv_sec  = XRSR_ADDR_RES_TIMEOUT;
-      timeout.tv_nsec = 0;
-
-      int rc = getaddrinfo_a(GAI_NOWAIT, &reqs, 1, NULL);
-      if(rc != 0) {
-         XLOGD_WARN("getaddrinfo_a <%s> attempt <%u>", gai_strerror(rc), attempt);
-         goto retry;
-      }
-
-      rc = gai_suspend(wait_reqs, 1, &timeout);
-      if(rc != 0 && rc != EAI_ALLDONE) {
-         XLOGD_WARN("gai_suspend <%s> attempt <%u>", gai_strerror(rc), attempt);
-         rc = gai_cancel(&req);
-         if(rc != 0) {
-            XLOGD_ERROR("gai_cancel <%s> attempt <%u>", gai_strerror(rc), attempt);
-         }
-         goto retry;
-      }
-
-      result = req.ar_result;
-      if(result == NULL) {
-         XLOGD_ERROR("result is NULL");
-         goto retry;
-      }
-      break; // Successful lookup should break out here.
-retry:
-      if(attempt >= retrycount) {
-         XLOGD_ERROR("address resolution failed");
-         return(family);
-      }
-      // Small delay then retry
-      usleep(20000);
-      attempt++;
-      continue;
-   } while(1);
-
-   family = XRSR_ADDRESS_FAMILY_IPV4;
-   for(struct addrinfo *rp = result; rp != NULL; rp = rp->ai_next) {
-      if(rp->ai_family == AF_INET6) {
-         family = XRSR_ADDRESS_FAMILY_IPV6;
-         break;
-      }
-   }
-   freeaddrinfo(result);
-
-   return(family);
 }
 
 #ifdef HTTP_ENABLED

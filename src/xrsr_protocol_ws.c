@@ -375,11 +375,6 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
    memset(&ws->stats, 0, sizeof(ws->stats));
    memset(&ws->audio_stats, 0, sizeof(ws->audio_stats));
 
-   if(((uint32_t)url_parts->family) >= XRSR_ADDRESS_FAMILY_INVALID) {
-      url_parts->family = xrsr_address_family_get(url_parts->host, url_parts->port_str, 5);
-      XLOGD_WARN("address family <%s>", xrsr_address_family_str(url_parts->family));
-   }
-
    if(!deferred) {
       xrsr_ws_event(ws, SM_EVENT_SESSION_BEGIN, false);
       return(true);
@@ -401,25 +396,9 @@ bool xrsr_ws_connect_new(xrsr_state_ws_t *ws) {
    XLOGD_INFO("attempt <%u>", ws->retry_cnt);
 
    if(ws->prot == XRSR_PROTOCOL_WSS) {
-      if(url_parts->family == XRSR_ADDRESS_FAMILY_IPV6) {
-         ws->obj_conn = nopoll_conn_tls_new6(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
-         if(ws->obj_conn == NULL) {
-            nopoll_opts = xrsr_conn_opts_get(ws->sat_token);
-         }
-      }
-      if(url_parts->family != XRSR_ADDRESS_FAMILY_IPV6 || ws->obj_conn == NULL) { // Fallback to IPV4 if IPV6 failed
-         ws->obj_conn = nopoll_conn_tls_new(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
-      }
+      ws->obj_conn = nopoll_conn_tls_new_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
    } else {
-      if(url_parts->family == XRSR_ADDRESS_FAMILY_IPV6) {
-         ws->obj_conn = nopoll_conn_new_opts6(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
-         if(ws->obj_conn == NULL) {
-            nopoll_opts = xrsr_conn_opts_get(ws->sat_token);
-         }
-      }
-      if(url_parts->family != XRSR_ADDRESS_FAMILY_IPV6 || (ws->obj_conn == NULL && ws->ipv4_fallback)) { // Fallback to IPV4 if IPV6 failed
-         ws->obj_conn = nopoll_conn_new_opts(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
-      }
+      ws->obj_conn = nopoll_conn_new_opts_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
    }
    
    if(ws->obj_conn == NULL) {
