@@ -87,63 +87,81 @@ bool xrsr_ws_init(xrsr_state_ws_t *ws, xrsr_ws_params_t *params) {
    sem_init(&ws->msg_out_semaphore, 0, 1);
    ws->msg_out_count = 0;
    memset(ws->msg_out, 0, sizeof(ws->msg_out));
-   
-   bool debug_enabled = false;
-   if(params->debug != NULL) { // debug parameter was specified
-      if(*params->debug) {
-         nopoll_log_enable(ws->obj_ctx, nopoll_true);
-         nopoll_log_set_handler(ws->obj_ctx, xrsr_ws_nopoll_log, NULL);
-         debug_enabled = true;
-      }
-   } else if(JSON_BOOL_VALUE_WS_DEBUG) { // debug enabled by default
-      nopoll_log_enable(ws->obj_ctx, nopoll_true);
-      nopoll_log_set_handler(ws->obj_ctx, xrsr_ws_nopoll_log, NULL);
-      debug_enabled = true;
-   }
 
+   xrsr_ws_update_dst_params(ws, params->dst_params);
    ws->timer_obj          = params->timer_obj;
    ws->prot               = params->prot;
    ws->audio_pipe_fd_read = -1;
    xrsr_ws_reset(ws);
 
-   if(params->connect_check_interval != NULL) {
-      ws->connect_check_interval = *params->connect_check_interval;
-   } else {
-      ws->connect_check_interval = JSON_INT_VALUE_WS_FPM_CONNECT_CHECK_INTERVAL;
-   }
-   if(params->timeout_connect != NULL) {
-      ws->timeout_connect = *params->timeout_connect;
-   } else {
-      ws->timeout_connect = JSON_INT_VALUE_WS_FPM_TIMEOUT_CONNECT;
-   }
-   if(params->timeout_inactivity != NULL) {
-      ws->timeout_inactivity = *params->timeout_inactivity;
-   } else {
-      ws->timeout_inactivity = JSON_INT_VALUE_WS_FPM_TIMEOUT_INACTIVITY;
-   }
-   if(params->timeout_session != NULL) {
-      ws->timeout_session = *params->timeout_session;
-   } else {
-      ws->timeout_session = JSON_INT_VALUE_WS_FPM_TIMEOUT_SESSION;
-   }
-   if(params->ipv4_fallback != NULL) {
-      ws->ipv4_fallback = *params->ipv4_fallback;
-   } else {
-      ws->ipv4_fallback = JSON_BOOL_VALUE_WS_FPM_IPV4_FALLBACK;
-   }
-   if(params->backoff_delay != NULL) {
-      ws->backoff_delay = *params->backoff_delay;
-   } else {
-      ws->backoff_delay = JSON_INT_VALUE_WS_FPM_BACKOFF_DELAY;
-   }
-
    xrsr_ws_host_name_set(ws, params->host_name);
 
    xrsr_ws_sm_init(ws);
 
-   XLOGD_INFO("host name <%s> debug <%s> connect <%u, %u> inactivity <%u> session <%u> ipv4 fallback <%s> backoff delay <%u>", params->host_name ? params->host_name : "", debug_enabled ? "YES" : "NO", ws->connect_check_interval, ws->timeout_connect, ws->timeout_inactivity, ws->timeout_session, ws->ipv4_fallback ? "YES" : "NO", ws->backoff_delay);
+   XLOGD_INFO("host name <%s>", params->host_name ? params->host_name : "");
 
    return(true);
+}
+
+bool xrsr_ws_update_dst_params(xrsr_state_ws_t *ws, xrsr_dst_param_ptrs_t *params) {
+   bool ret = false;
+   if(ws) {
+      if(params->debug != NULL) { // debug parameter was specified
+         if(*params->debug) {
+            nopoll_log_enable(ws->obj_ctx, nopoll_true);
+            nopoll_log_set_handler(ws->obj_ctx, xrsr_ws_nopoll_log, NULL);
+            ws->debug_enabled = true;
+         } else {
+            nopoll_log_set_handler(ws->obj_ctx, NULL, NULL); // Remove log handler
+            nopoll_log_enable(ws->obj_ctx, nopoll_false); // disable logging
+            ws->debug_enabled = false;
+         }
+      } else if(JSON_BOOL_VALUE_WS_DEBUG) { // debug enabled by default
+         nopoll_log_enable(ws->obj_ctx, nopoll_true);
+         nopoll_log_set_handler(ws->obj_ctx, xrsr_ws_nopoll_log, NULL);
+         ws->debug_enabled = true;
+      } else {
+         nopoll_log_set_handler(ws->obj_ctx, NULL, NULL); // Remove log handler
+         nopoll_log_enable(ws->obj_ctx, nopoll_false); // disable logging
+         ws->debug_enabled = false;
+      }
+
+      if(params->connect_check_interval != NULL) {
+         ws->connect_check_interval = *params->connect_check_interval;
+      } else {
+         ws->connect_check_interval = JSON_INT_VALUE_WS_FPM_CONNECT_CHECK_INTERVAL;
+      }
+      if(params->timeout_connect != NULL) {
+         ws->timeout_connect = *params->timeout_connect;
+      } else {
+         ws->timeout_connect = JSON_INT_VALUE_WS_FPM_TIMEOUT_CONNECT;
+      }
+      if(params->timeout_inactivity != NULL) {
+         ws->timeout_inactivity = *params->timeout_inactivity;
+      } else {
+         ws->timeout_inactivity = JSON_INT_VALUE_WS_FPM_TIMEOUT_INACTIVITY;
+      }
+      if(params->timeout_session != NULL) {
+         ws->timeout_session = *params->timeout_session;
+      } else {
+         ws->timeout_session = JSON_INT_VALUE_WS_FPM_TIMEOUT_SESSION;
+      }
+      if(params->ipv4_fallback != NULL) {
+         ws->ipv4_fallback = *params->ipv4_fallback;
+      } else {
+         ws->ipv4_fallback = JSON_BOOL_VALUE_WS_FPM_IPV4_FALLBACK;
+      }
+      if(params->backoff_delay != NULL) {
+         ws->backoff_delay = *params->backoff_delay;
+      } else {
+         ws->backoff_delay = JSON_INT_VALUE_WS_FPM_BACKOFF_DELAY;
+      }
+
+      XLOGD_INFO("debug <%s> connect <%u, %u> inactivity <%u> session <%u> ipv4 fallback <%s> backoff delay <%u>", ws->debug_enabled ? "YES" : "NO", ws->connect_check_interval, ws->timeout_connect, ws->timeout_inactivity, ws->timeout_session, ws->ipv4_fallback ? "YES" : "NO", ws->backoff_delay);
+   } else {
+      XLOGD_WARN("ws state NULL");
+   }
+   return(ret);
 }
 
 void xrsr_ws_nopoll_log(noPollCtx * ctx, noPollDebugLevel level, const char * log_msg, noPollPtr user_data) {

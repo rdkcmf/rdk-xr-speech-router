@@ -95,6 +95,16 @@ typedef struct {
 } xrsr_url_parts_t;
 
 typedef struct {
+   bool     *debug;
+   uint32_t *connect_check_interval;
+   uint32_t *timeout_connect;
+   uint32_t *timeout_inactivity;
+   uint32_t *timeout_session;
+   bool     *ipv4_fallback;
+   uint32_t *backoff_delay;
+} xrsr_dst_param_ptrs_t;
+
+typedef struct {
    xrsr_queue_msg_type_t type;
 } xrsr_queue_msg_header_t;
 

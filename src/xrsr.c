@@ -72,6 +72,7 @@ typedef struct {
    uint32_t                     keyword_begin;
    uint32_t                     keyword_duration;
    xrsr_conn_state_t            conn_state;
+   xrsr_dst_param_ptrs_t        dst_param_ptrs[XRSR_POWER_MODE_INVALID];
 } xrsr_dst_int_t;
 
 typedef struct {
@@ -758,29 +759,32 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
          case XRSR_PROTOCOL_WSS: {
             dst_int->handler = xrsr_protocol_handler_ws;
 
+            // Set params from json config and allow override per url/powerstate
+            for(int i = 0; i < XRSR_POWER_MODE_INVALID; i++) {
+               if(dst->params[i] != NULL) {
+                  dst_int->dst_param_ptrs[i].debug                  = &dst->params[i]->debug;
+                  dst_int->dst_param_ptrs[i].connect_check_interval = &dst->params[i]->connect_check_interval;
+                  dst_int->dst_param_ptrs[i].timeout_connect        = &dst->params[i]->timeout_connect;
+                  dst_int->dst_param_ptrs[i].timeout_inactivity     = &dst->params[i]->timeout_inactivity;
+                  dst_int->dst_param_ptrs[i].timeout_session        = &dst->params[i]->timeout_session;
+                  dst_int->dst_param_ptrs[i].ipv4_fallback          = &dst->params[i]->ipv4_fallback;
+                  dst_int->dst_param_ptrs[i].backoff_delay          = &dst->params[i]->backoff_delay;
+               } else {
+                  dst_int->dst_param_ptrs[i].debug                  = g_xrsr.ws_json_config->ptr_debug;
+                  dst_int->dst_param_ptrs[i].connect_check_interval = g_xrsr.ws_json_config->ptr_connect_check_interval;
+                  dst_int->dst_param_ptrs[i].timeout_connect        = g_xrsr.ws_json_config->ptr_timeout_connect;
+                  dst_int->dst_param_ptrs[i].timeout_inactivity     = g_xrsr.ws_json_config->ptr_timeout_inactivity;
+                  dst_int->dst_param_ptrs[i].timeout_session        = g_xrsr.ws_json_config->ptr_timeout_session;
+                  dst_int->dst_param_ptrs[i].ipv4_fallback          = g_xrsr.ws_json_config->ptr_ipv4_fallback;
+                  dst_int->dst_param_ptrs[i].backoff_delay          = g_xrsr.ws_json_config->ptr_backoff_delay;
+               }
+            }
+
             xrsr_ws_params_t params;
             params.prot               = url_parts.prot;
             params.host_name          = host_name;
             params.timer_obj          = state->timer_obj;
-
-            // Set params from json config and allow override per url
-            if(dst->params != NULL) { // user has specified params
-               params.debug                  = &dst->params->debug;
-               params.connect_check_interval = &dst->params->connect_check_interval;
-               params.timeout_connect        = &dst->params->timeout_connect;
-               params.timeout_inactivity     = &dst->params->timeout_inactivity;
-               params.timeout_session        = &dst->params->timeout_session;
-               params.ipv4_fallback          = &dst->params->ipv4_fallback;
-               params.backoff_delay          = &dst->params->backoff_delay;
-            } else { // use json params
-               params.debug                  = g_xrsr.ws_json_config->ptr_debug;
-               params.connect_check_interval = g_xrsr.ws_json_config->ptr_connect_check_interval;
-               params.timeout_connect        = g_xrsr.ws_json_config->ptr_timeout_connect;
-               params.timeout_inactivity     = g_xrsr.ws_json_config->ptr_timeout_inactivity;
-               params.timeout_session        = g_xrsr.ws_json_config->ptr_timeout_session;
-               params.ipv4_fallback          = g_xrsr.ws_json_config->ptr_ipv4_fallback;
-               params.backoff_delay          = g_xrsr.ws_json_config->ptr_backoff_delay;
-            }
+            params.dst_params         = &dst_int->dst_param_ptrs[g_xrsr.power_mode];
 
             if(!xrsr_ws_init(&dst_int->conn_state.ws, &params)) {
                XLOGD_ERROR("ws init");
@@ -1411,6 +1415,27 @@ void xrsr_msg_power_mode_update(const xrsr_thread_params_t *params, xrsr_thread_
    xrsr_queue_msg_power_mode_update_t *power_mode_update = (xrsr_queue_msg_power_mode_update_t *)msg;
 
    XLOGD_INFO("power mode <%s>", xrsr_power_mode_str(power_mode_update->power_mode));
+
+   // Update the dst params for the new power mode
+   for(uint32_t index_src = 0; index_src < XRSR_SRC_INVALID; index_src++) {
+      for(uint32_t index_dst = 0; index_dst < XRSR_DST_QTY_MAX; index_dst++) {
+         xrsr_dst_int_t *dst = &g_xrsr.routes[index_src].dsts[index_dst];
+
+         switch(dst->url_parts.prot) {
+            #ifdef WS_ENABLED
+            case XRSR_PROTOCOL_WS:
+            case XRSR_PROTOCOL_WSS: {
+               xrsr_state_ws_t *ws = &dst->conn_state.ws;
+               xrsr_ws_update_dst_params(ws, &dst->dst_param_ptrs[power_mode_update->power_mode]);
+               break;
+            }
+            #endif
+            default: {
+               break;
+            }
+         }
+      }
+   }
 
    bool result = xrsr_xraudio_power_mode_update(g_xrsr.xrsr_xraudio_object, power_mode_update->power_mode);
 

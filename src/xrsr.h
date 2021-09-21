@@ -413,14 +413,14 @@ typedef struct {
 /// @brief XRSR route structure
 /// @details The route data structure provides detailed information about a route.
 typedef struct {
-   const char *        url;             ///< URL for the server which will handle requests
-   xrsr_handlers_t     handlers;        ///< Callback function handlers
-   xrsr_audio_format_t format;          ///< Audio format to transmit to the destination
-   uint16_t            stream_time_min; ///< Minimum duration of audio required before establishing a session with the server.  (in milliseconds)
-   xrsr_stream_from_t  stream_from;     ///< Point from which to begin streaming
-   int32_t             stream_offset;   ///< Offset in samples from the stream from point
-   xrsr_stream_until_t stream_until;    ///< Continue streaming until this condition is encountered or an errror occurs
-   xrsr_dst_params_t * params;          ///< Optional parameters for the route
+   const char *        url;                             ///< URL for the server which will handle requests
+   xrsr_handlers_t     handlers;                        ///< Callback function handlers
+   xrsr_audio_format_t format;                          ///< Audio format to transmit to the destination
+   uint16_t            stream_time_min;                 ///< Minimum duration of audio required before establishing a session with the server.  (in milliseconds)
+   xrsr_stream_from_t  stream_from;                     ///< Point from which to begin streaming
+   int32_t             stream_offset;                   ///< Offset in samples from the stream from point
+   xrsr_stream_until_t stream_until;                    ///< Continue streaming until this condition is encountered or an errror occurs
+   xrsr_dst_params_t * params[XRSR_POWER_MODE_INVALID]; ///< Optional parameters for the route
 } xrsr_dst_t;
 
 /// @brief XRSR route structure

@@ -32,21 +32,16 @@
 #define XRSR_WS_WRITE_PENDING_RETRY_MAX (5)
 
 typedef struct {
-   xrsr_protocol_t     prot;
-   const char *        host_name;
-   rdkx_timer_object_t timer_obj;
-   bool *              debug;
-   uint32_t *          connect_check_interval;
-   uint32_t *          timeout_connect;
-   uint32_t *          timeout_inactivity;
-   uint32_t *          timeout_session;
-   bool *              ipv4_fallback;
-   uint32_t *          backoff_delay;
+   xrsr_protocol_t        prot;
+   const char *           host_name;
+   rdkx_timer_object_t    timer_obj;
+   xrsr_dst_param_ptrs_t *dst_params;
 } xrsr_ws_params_t;
 
 typedef struct {
    xrsr_protocol_t              prot;  // Used for identification
    xrsr_handlers_t              handlers;
+   bool                         debug_enabled;
    xrsr_session_configuration_t session_configuration;
    rdkx_timer_object_t          timer_obj;
    rdkx_timer_id_t              timer_id;
@@ -102,6 +97,7 @@ typedef struct {
 void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 bool xrsr_ws_init(xrsr_state_ws_t *ws, xrsr_ws_params_t *params);
 void xrsr_ws_term(xrsr_state_ws_t *ws);
+bool xrsr_ws_update_dst_params(xrsr_state_ws_t *ws, xrsr_dst_param_ptrs_t *params);
 void xrsr_ws_host_name_set(xrsr_state_ws_t *ws, const char *host_name);
 void xrsr_ws_fd_set(xrsr_state_ws_t *ws, int *nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
 void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
