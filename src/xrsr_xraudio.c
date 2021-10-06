@@ -419,11 +419,6 @@ void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object) {
 void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
    XLOGD_INFO("phrase <%s> config <%s>", xraudio_keyword_phrase_str(obj->keyword_phrase), xraudio_keyword_config_str(obj->keyword_config));
 
-   if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_SLEEP ) {
-      XLOGD_INFO("sleep mode, do not start keyword detector");
-      return;
-   }
-
    xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_config);
    if(XRAUDIO_RESULT_OK != result) {
       XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
