@@ -33,6 +33,7 @@
 #define SM_EVENT_CONNECTED                (7)
 #define SM_EVENT_MSG_RECV                 (8)
 #define SM_EVENT_PIPE_EOS                 (9)
+#define SM_EVENT_TEXT_SESSION_SUCCESS     (10)
 
 //-------------------------------------------------------------------------------
 // States
@@ -43,6 +44,7 @@ STATE_DECLARE( St_Http_Buffering );
 STATE_DECLARE( St_Http_Connecting );
 STATE_DECLARE( St_Http_Connected );
 STATE_DECLARE( St_Http_Streaming );
+STATE_DECLARE( St_Http_TextOnlySession );
 
 // St_Http_Disconnected State Description ----------------------------------------------------------------
 tStateGuard St_Http_Disconnected_NextStates[] = 
@@ -119,7 +121,8 @@ tStateGuard St_Http_Streaming_NextStates[] =
 {
     { SM_EVENT_PIPE_EOS, &St_Http_Connected_Info },
     { SM_EVENT_TERMINATE, &St_Http_Disconnected_Info },
-    { SM_EVENT_MSG_RECV, &St_Http_Disconnected_Info }
+    { SM_EVENT_MSG_RECV, &St_Http_Disconnected_Info },
+    { SM_EVENT_TEXT_SESSION_SUCCESS, &St_Http_TextOnlySession_Info }
 };
 
 tStateInfo St_Http_Streaming_Info = 
@@ -128,6 +131,24 @@ tStateInfo St_Http_Streaming_Info =
     St_Http_Streaming,
     ARRAY_COUNT( St_Http_Streaming_NextStates ),
     St_Http_Streaming_NextStates,
+    0,
+    NULL
+};
+
+// St_Http_TextOnlySession State Description ----------------------------------------------------------------
+tStateGuard St_Http_TextOnlySession_NextStates[] = 
+{
+    { SM_EVENT_PIPE_EOS, &St_Http_Connected_Info },
+    { SM_EVENT_TERMINATE, &St_Http_Disconnected_Info },
+    { SM_EVENT_MSG_RECV, &St_Http_Disconnected_Info }
+};
+
+tStateInfo St_Http_TextOnlySession_Info = 
+{
+    SHOW_ST_NAME( "St_Http_TextOnlySession" )
+    St_Http_TextOnlySession,
+    ARRAY_COUNT( St_Http_TextOnlySession_NextStates ),
+    St_Http_TextOnlySession_NextStates,
     0,
     NULL
 };

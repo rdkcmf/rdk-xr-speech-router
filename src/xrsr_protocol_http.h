@@ -52,6 +52,8 @@ typedef struct {
    xrsr_audio_stats_t           audio_stats;
    xrsr_session_stats_t         session_stats;
 
+   bool                         is_session_by_text;
+
    /* State Machine */
    tSmInstance                  state_machine;
    tStateEvent                  state_machine_events_active[XRSR_WS_SM_EVENTS_MAX];

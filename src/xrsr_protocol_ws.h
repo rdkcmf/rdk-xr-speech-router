@@ -80,6 +80,8 @@ typedef struct {
    bool                         ipv4_fallback;
    uint32_t                     backoff_delay;
 
+   bool                         is_session_by_text;
+
    /* WS Library Specific attributes */
    noPollCtx *                  obj_ctx;
    noPollConn *                 obj_conn;

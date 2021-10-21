@@ -470,7 +470,7 @@ int  xrsr_http_send(xrsr_state_http_t *http, const uint8_t *buffer, uint32_t len
         XLOGD_ERROR("NULL xrsr_state_http_t");
         return(-1);
     }
-    return(0);
+    return(1);
 }
 
 int  xrsr_http_recv(xrsr_state_http_t *http, uint8_t *buffer, uint32_t length) {
@@ -663,7 +663,8 @@ void xrsr_http_reset(xrsr_state_http_t *http) {
         memset(&http->session_stats, 0, sizeof(http->session_stats));
         http->detect_resume      = true;
         http->session_stats.reason = XRSR_SESSION_END_REASON_EOS;
-}
+        http->is_session_by_text   = false;
+    }
 }
 
 void xrsr_http_sm_init(xrsr_state_http_t *http) {
@@ -858,6 +859,9 @@ void St_Http_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
             char uuid_str[37] = {'\0'};
             uuid_unparse_lower(http->session_configuration.http.uuid, uuid_str);
             xrsr_session_stream_begin(http->session_configuration.http.uuid, uuid_str, http->audio_src, http->dst_index);
+            if (http->is_session_by_text) {
+                xrsr_http_event(http, SM_EVENT_TEXT_SESSION_SUCCESS, true);
+            }
             break;
         }
         case ACT_EXIT: {
@@ -870,6 +874,50 @@ void St_Http_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
                 case SM_EVENT_MSG_RECV: {
                     xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_REMOTE, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE;
+                    break;
+                }
+                case SM_EVENT_PIPE_EOS: {
+                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_AUDIO_EOF, http->detect_resume, &http->audio_stats);
+                    break;
+                }
+                case SM_EVENT_TEXT_SESSION_SUCCESS: {
+                    XLOGD_INFO("SM_EVENT_TEXT_SESSION_SUCCESS - text-only session started successfully.");
+                    break;
+                }
+                default: {
+                    break;
+                }
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+}
+
+void St_Http_TextOnlySession(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResponse) {
+    xrsr_state_http_t *http = (xrsr_state_http_t *)pEvent->mData;
+    switch(eAction) {
+        case ACT_GUARD: {
+            if(bGuardResponse) {
+                *bGuardResponse = true;
+            }
+            break;
+        }
+        case ACT_ENTER: {
+            break;
+        }
+        case ACT_EXIT: {
+            switch(pEvent->mID) {
+                case SM_EVENT_TERMINATE: {
+                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_LOCAL, http->detect_resume, &http->audio_stats);
+                    http->session_stats.reason = XRSR_SESSION_END_REASON_TERMINATE;
+                    break;
+                }
+                case SM_EVENT_MSG_RECV: {
+                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_INVALID, http->detect_resume, &http->audio_stats);
+                    http->session_stats.reason = XRSR_SESSION_END_REASON_EOT;
                     break;
                 }
                 case SM_EVENT_PIPE_EOS: {
@@ -892,7 +940,8 @@ bool xrsr_http_is_connected(xrsr_state_http_t *http) {
     bool ret = false;
     if(http) {
         if(SmInThisState(&http->state_machine, &St_Http_Connected_Info) ||
-            SmInThisState(&http->state_machine, &St_Http_Streaming_Info)) {
+           SmInThisState(&http->state_machine, &St_Http_Streaming_Info) ||
+           SmInThisState(&http->state_machine, &St_Http_TextOnlySession_Info)) {
             ret = true;
         }
     }

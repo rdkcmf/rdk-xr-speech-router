@@ -761,6 +761,7 @@ void xrsr_ws_reset(xrsr_state_ws_t *ws) {
       ws->detect_resume         = true;
       ws->on_close              = false;
       ws->retry_cnt             = 1;
+      ws->is_session_by_text    = false;
       if(ws->audio_pipe_fd_read > -1) {
          close(ws->audio_pipe_fd_read);
          ws->audio_pipe_fd_read = -1;
@@ -1156,18 +1157,23 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
          break;
       }
       case ACT_ENTER: {
+         bool success = false;
          // Call connected handler
          if(ws->handlers.connected == NULL) {
             XLOGD_INFO("connected handler not available");
          } else {
             rdkx_timestamp_t timestamp;
             rdkx_timestamp_get_realtime(&timestamp);
-            (*ws->handlers.connected)(ws->handlers.data, ws->session_configuration.ws.uuid, xrsr_conn_send, (void *)ws, &timestamp);
+            success = (*ws->handlers.connected)(ws->handlers.data, ws->session_configuration.ws.uuid, xrsr_conn_send, (void *)ws, &timestamp);
          }
 
          char uuid_str[37] = {'\0'};
          uuid_unparse_lower(ws->session_configuration.ws.uuid, uuid_str);
          xrsr_session_stream_begin(ws->session_configuration.ws.uuid, uuid_str, ws->audio_src, ws->dst_index);
+
+         if (success && ws->is_session_by_text) {
+            xrsr_ws_event(ws, SM_EVENT_TEXT_SESSION_SUCCESS, true);
+         }
          break;
       }
       case ACT_EXIT: {
@@ -1200,6 +1206,69 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
             case SM_EVENT_WS_CLOSE: {
                ws->stream_end_reason  = XRSR_STREAM_END_REASON_DISCONNECT_REMOTE;
                ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_WS_SEND;
+               break;
+            }
+            case SM_EVENT_TEXT_SESSION_SUCCESS: {
+               XLOGD_INFO("SM_EVENT_TEXT_SESSION_SUCCESS - text-only session init message sent successfully.");
+               break;
+            }
+            default: {
+               break;
+            }
+         }
+         if (pEvent->mID != SM_EVENT_TEXT_SESSION_SUCCESS) {
+            xrsr_ws_speech_stream_end(ws, ws->stream_end_reason, ws->detect_resume);
+         }
+         break;
+      }
+      default: {
+         break;
+      }
+   }
+}
+
+void St_Ws_TextOnlySession(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResponse) {
+   xrsr_state_ws_t *ws = (xrsr_state_ws_t *)pEvent->mData;
+   switch(eAction) {
+      case ACT_GUARD: {
+         if(bGuardResponse) {
+            *bGuardResponse = true;
+         }
+         break;
+      }
+      case ACT_ENTER: {
+         break;
+      }
+      case ACT_EXIT: {
+         switch(pEvent->mID) {
+            case SM_EVENT_EOS_PIPE: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_AUDIO_EOF;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_EOS;
+               break;
+            }
+            case SM_EVENT_TERMINATE: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_DISCONNECT_LOCAL;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_TERMINATE;
+               break;
+            }
+            case SM_EVENT_ESTABLISH_TIMEOUT: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_DID_NOT_BEGIN;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT;
+               break;
+            }
+            case SM_EVENT_AUDIO_ERROR: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_ERROR_AUDIO_READ;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_EOS;
+               break;
+            }
+            case SM_EVENT_WS_ERROR: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_DISCONNECT_REMOTE;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_WS_SEND;
+               break;
+            }
+            case SM_EVENT_WS_CLOSE: {
+               ws->stream_end_reason  = XRSR_STREAM_END_REASON_INVALID;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_EOT;
                break;
             }
             default: {
@@ -1273,7 +1342,8 @@ bool xrsr_ws_is_established(xrsr_state_ws_t *ws) {
    bool ret = false;
    if(ws) {
       if(SmInThisState(&ws->state_machine, &St_Ws_Established_Info) ||
-         SmInThisState(&ws->state_machine, &St_Ws_Streaming_Info)) {
+         SmInThisState(&ws->state_machine, &St_Ws_Streaming_Info) || 
+         SmInThisState(&ws->state_machine, &St_Ws_TextOnlySession_Info)) {
          ret = true;
       }
    }

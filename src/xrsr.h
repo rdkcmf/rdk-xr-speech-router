@@ -85,15 +85,16 @@ typedef enum {
 /// @details The session end reason enumeration indicates all the reasons why a voice session may end.
 typedef enum {
    XRSR_SESSION_END_REASON_EOS                   = 0, ///< End of speech detected in the source audio
-   XRSR_SESSION_END_REASON_TERMINATE             = 1, ///< Session was terminated before completion
-   XRSR_SESSION_END_REASON_ERROR_INTERNAL        = 2, ///< Session ended due to an internal error
-   XRSR_SESSION_END_REASON_ERROR_WS_SEND         = 3, ///< Session ended due to failure to send websocket data
-   XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN     = 4, ///< Session ended since no audio was received from the source
-   XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION  = 5, ///< Session ended due to an insufficient amount of audio samples received
-   XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE = 6, ///< Session ended due to failure to connect to the consumer endpoint
-   XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT = 7, ///< Session ended due to connection timeout to the consumer endpoint
-   XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT = 8, ///< Session ended due to a session timeout expiration
-   XRSR_SESSION_END_REASON_INVALID               = 9, ///< An invalid session end reason
+   XRSR_SESSION_END_REASON_EOT                   = 1, ///< End of text-only session
+   XRSR_SESSION_END_REASON_TERMINATE             = 2, ///< Session was terminated before completion
+   XRSR_SESSION_END_REASON_ERROR_INTERNAL        = 3, ///< Session ended due to an internal error
+   XRSR_SESSION_END_REASON_ERROR_WS_SEND         = 4, ///< Session ended due to failure to send websocket data
+   XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN     = 5, ///< Session ended since no audio was received from the source
+   XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION  = 6, ///< Session ended due to an insufficient amount of audio samples received
+   XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE = 7, ///< Session ended due to failure to connect to the consumer endpoint
+   XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT = 8, ///< Session ended due to connection timeout to the consumer endpoint
+   XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT = 9, ///< Session ended due to a session timeout expiration
+   XRSR_SESSION_END_REASON_INVALID               = 10, ///< An invalid session end reason
 } xrsr_session_end_reason_t;
 
 /// @brief XRSR internal return code types
@@ -356,8 +357,8 @@ typedef void (*xrsr_handler_source_error_t)(void *data, xrsr_src_t src);
 /// @details Callback function prototype for handling server connect events.
 /// @param[in] send  Function handler to send data during the session
 /// @param[in] param Pass-thru parameter to be used when calling the send handler
-/// @return The function has no return value.
-typedef void (*xrsr_handler_connected_t)(void *data, const uuid_t uuid, xrsr_handler_send_t send, void *param, rdkx_timestamp_t *timestamp);
+/// @return The function returns true if successful or false otherwise.
+typedef bool (*xrsr_handler_connected_t)(void *data, const uuid_t uuid, xrsr_handler_send_t send, void *param, rdkx_timestamp_t *timestamp);
 
 /// @brief XRSR disconnected handler
 /// @details Callback function prototype for handling server disconnect events.

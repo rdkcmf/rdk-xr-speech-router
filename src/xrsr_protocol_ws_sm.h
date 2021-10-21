@@ -42,6 +42,7 @@
 #define SM_EVENT_WS_ERROR                 (16)
 #define SM_EVENT_AUDIO_ERROR              (17)
 #define SM_EVENT_ESTABLISH_TIMEOUT        (18)
+#define SM_EVENT_TEXT_SESSION_SUCCESS     (19)
 
 //-------------------------------------------------------------------------------
 // States
@@ -55,6 +56,7 @@ STATE_DECLARE( St_Ws_Connected );
 STATE_DECLARE( St_Ws_Connection_Retry );
 STATE_DECLARE( St_Ws_Established );
 STATE_DECLARE( St_Ws_Streaming );
+STATE_DECLARE( St_Ws_TextOnlySession );
 
 // St_Ws_Disconnected State Description ----------------------------------------------------------------
 tStateGuard St_Ws_Disconnected_NextStates[] = 
@@ -175,7 +177,8 @@ tStateGuard St_Ws_Streaming_NextStates[] =
     { SM_EVENT_TERMINATE, &St_Ws_Disconnecting_Info },
     { SM_EVENT_WS_ERROR, &St_Ws_Disconnecting_Info },
     { SM_EVENT_WS_CLOSE, &St_Ws_Disconnected_Info },
-    { SM_EVENT_AUDIO_ERROR, &St_Ws_Established_Info }
+    { SM_EVENT_AUDIO_ERROR, &St_Ws_Established_Info },
+    { SM_EVENT_TEXT_SESSION_SUCCESS, &St_Ws_TextOnlySession_Info }
 };
 
 tStateInfo St_Ws_Streaming_Info = 
@@ -184,6 +187,26 @@ tStateInfo St_Ws_Streaming_Info =
     St_Ws_Streaming,
     ARRAY_COUNT( St_Ws_Streaming_NextStates ),
     St_Ws_Streaming_NextStates,
+    0,
+    NULL
+};
+
+// St_Ws_TextOnlySession State Description ----------------------------------------------------------------
+tStateGuard St_Ws_TextOnlySession_NextStates[] = 
+{
+    { SM_EVENT_EOS_PIPE, &St_Ws_Established_Info },
+    { SM_EVENT_TERMINATE, &St_Ws_Disconnecting_Info },
+    { SM_EVENT_WS_ERROR, &St_Ws_Disconnecting_Info },
+    { SM_EVENT_WS_CLOSE, &St_Ws_Disconnected_Info },
+    { SM_EVENT_AUDIO_ERROR, &St_Ws_Established_Info }
+};
+
+tStateInfo St_Ws_TextOnlySession_Info = 
+{
+    SHOW_ST_NAME( "St_Ws_TextOnlySession" )
+    St_Ws_TextOnlySession,
+    ARRAY_COUNT( St_Ws_TextOnlySession_NextStates ),
+    St_Ws_TextOnlySession_NextStates,
     0,
     NULL
 };

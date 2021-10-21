@@ -1605,6 +1605,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          case XRSR_PROTOCOL_HTTPS: {
             int pipe_fd_read = -1;
             xrsr_state_http_t *http = &dst->conn_state.http;
+            http->is_session_by_text = (transcription_in != NULL);
             if(!xrsr_http_is_disconnected(http)) {
                XLOGD_ERROR("invalid state");
                break;
@@ -1653,6 +1654,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          case XRSR_PROTOCOL_WS:
          case XRSR_PROTOCOL_WSS: {
             xrsr_state_ws_t *ws = &dst->conn_state.ws;
+            ws->is_session_by_text = (transcription_in != NULL);
             if(xrsr_ws_is_disconnected(ws)) {
                xrsr_session_configuration_ws_t *session_config = &ws->session_configuration.ws;
 
@@ -2081,12 +2083,13 @@ void xrsr_keyword_detect_error(xrsr_src_t src) {
 
 xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length) {
    xrsr_protocol_t *prot = (xrsr_protocol_t *)param;
+   int ret = 0;
    switch(*prot) {
       #ifdef WS_ENABLED
       case XRSR_PROTOCOL_WS:
       case XRSR_PROTOCOL_WSS: {
          xrsr_state_ws_t *ws = (xrsr_state_ws_t *)param;
-         xrsr_ws_send_text(ws, buffer, length);
+         ret = xrsr_ws_send_text(ws, buffer, length);
          break;
       }
       #endif
@@ -2094,14 +2097,14 @@ xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length
       case XRSR_PROTOCOL_HTTP:
       case XRSR_PROTOCOL_HTTPS: {
          xrsr_state_http_t *http = (xrsr_state_http_t *)param;
-         xrsr_http_send(http, buffer, length);
+         ret = xrsr_http_send(http, buffer, length);
          break;
       }
       #endif
       #ifdef SDT_ENABLED
       case XRSR_PROTOCOL_SDT: {
         xrsr_state_sdt_t *sdt = (xrsr_state_sdt_t *)param;
-        xrsr_sdt_send_text(sdt, buffer, length);
+        ret = xrsr_sdt_send_text(sdt, buffer, length);
          break;
       }
       #endif
@@ -2110,8 +2113,7 @@ xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length
          break;
       }
    }
-   // TODO process return code
-   return(XRSR_RESULT_SUCCESS);
+   return(ret == 1) ? XRSR_RESULT_SUCCESS : XRSR_RESULT_ERROR;
 }
 
 bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xraudio_input_format_t native_format, bool user_initiated, int *pipe_fd_read) {
