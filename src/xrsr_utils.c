@@ -389,7 +389,9 @@ const char *xrsr_curlmcode_str(CURLMcode code) {
       case CURLM_BAD_SOCKET:         return("BAD_SOCKET");
       case CURLM_UNKNOWN_OPTION:     return("UNKNOWN_OPTION");
       case CURLM_ADDED_ALREADY:      return("ADDED_ALREADY");
+      #ifdef CURLM_RECURSIVE_API_CALL
       case CURLM_RECURSIVE_API_CALL: return("RECURSIVE_API_CALL");
+      #endif
       case CURLM_LAST:               return("LAST");
       default: break;
    }
