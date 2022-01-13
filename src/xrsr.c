@@ -1571,16 +1571,19 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          detector_result.offset_buf_begin = begin->detector_result.endpoints.pre;
          detector_result.offset_kwd_begin = begin->detector_result.endpoints.begin;
          detector_result.offset_kwd_end   = begin->detector_result.endpoints.end;
+         detector_result.kwd_gain         = begin->detector_result.endpoints.kwd_gain;
          detector_result.detector_name    = begin->detector_result.detector_name;
          detector_result.dsp_name         = begin->detector_result.dsp_name;
+         detector_result.dynamic_gain     = begin->detector_result.channels[begin->detector_result.chan_selected].dynamic_gain;
 
          detector_result_ptr   = &detector_result;
 
          XLOGD_INFO("selected kwd channel <%u>", begin->detector_result.chan_selected);
+         XLOGD_INFO("kwd_gain <%f>", detector_result.kwd_gain);
          for(uint32_t chan = 0; chan < XRAUDIO_INPUT_MAX_CHANNEL_QTY; chan++) {
             xraudio_kwd_chan_result_t *chan_result = &begin->detector_result.channels[chan];
             if(chan_result->score >= 0.0) {
-               XLOGD_INFO("chan <%u> score <%0.6f> snr <%0.4f> doa <%u>", chan, chan_result->score, chan_result->snr, chan_result->doa);
+               XLOGD_INFO("chan <%u> score <%0.6f> snr <%0.4f> doa <%u> dynamic_gain <%f>", chan, chan_result->score, chan_result->snr, chan_result->doa, chan_result->dynamic_gain);
             }
          }
       }

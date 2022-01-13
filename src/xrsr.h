@@ -279,8 +279,10 @@ typedef struct {
    int32_t      offset_buf_begin; ///< Negative offset in samples to the beginning of audio buffer
    int32_t      offset_kwd_begin; ///< Negative offset in samples to the keyword begin point
    int32_t      offset_kwd_end;   ///< Negative offset in samples to the keyword end point
+   float        kwd_gain;         ///< Fixed gain applied to audio input of the keyword detector
    const char * detector_name;    ///< Name of keyword detector that triggered
    const char * dsp_name;         ///< Name of DSP preprocessing in use
+   float        dynamic_gain;     ///< Dynamic gain value calculated after keyword detection
 } xrsr_keyword_detector_result_t;
 
 /// @brief XRSR destination params structure
