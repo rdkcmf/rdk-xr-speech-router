@@ -64,7 +64,7 @@ typedef struct {
    xrsr_url_parts_t             url_parts;
    xrsr_route_handler_t         handler;
    xrsr_handlers_t              handlers;
-   xrsr_audio_format_t          format;
+   xrsr_audio_format_t          formats;
    uint16_t                     stream_time_min;
    xraudio_input_record_from_t  stream_from;
    int32_t                      stream_offset;
@@ -183,7 +183,7 @@ static void xrsr_route_free_all(void);
 static void xrsr_route_free(xrsr_src_t src);
 static void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_thread_state_t *state);
 
-static xrsr_audio_format_t xrsr_audio_format_get(xrsr_audio_format_t format_dst, xraudio_input_format_t format_src);
+static xrsr_audio_format_t xrsr_audio_format_get(uint32_t formats_supported_dst, xraudio_input_format_t format_src);
 
 void xrsr_version(xrsr_version_info_t *version_info, uint32_t *qty) {
    if(qty == NULL || *qty < XRSR_VERSION_QTY_MAX || version_info == NULL) {
@@ -692,7 +692,6 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
    for(uint32_t dst_index = 0; dst_index < route->dst_qty; dst_index++) {
       const xrsr_dst_t *dst = &route->dsts[dst_index];
       const char *                 url             = dst->url;
-      xrsr_audio_format_t          format          = dst->format;
       uint16_t                     stream_time_min = dst->stream_time_min;
       xraudio_input_record_from_t  stream_from     = XRAUDIO_INPUT_RECORD_FROM_BEGINNING;
       xraudio_input_record_until_t stream_until    = XRAUDIO_INPUT_RECORD_UNTIL_END_OF_STREAM;
@@ -700,11 +699,6 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
       if(index >= XRSR_DST_QTY_MAX) {
          XLOGD_ERROR("maximum destinations exceeded <%u>", index);
          break;
-      }
-
-      if((uint32_t)format >= (uint32_t)XRSR_AUDIO_FORMAT_INVALID) {
-         XLOGD_WARN("invalid audio format <%s>", xrsr_audio_format_str(format));
-         return;
       }
 
       if((uint32_t)dst->stream_from >= XRSR_STREAM_FROM_INVALID) {
@@ -820,7 +814,7 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
       // Add new route
       dst_int->url_parts        = url_parts;
       dst_int->handlers         = dst->handlers;
-      dst_int->format           = format;
+      dst_int->formats          = dst->formats;
       dst_int->stream_time_min  = stream_time_min;
       dst_int->stream_from      = stream_from;
       dst_int->stream_offset    = dst->stream_offset;
@@ -856,7 +850,7 @@ bool xrsr_route(const xrsr_route_t routes[]) {
 
       for(uint32_t dst_index = 0; dst_index < routes[index].dst_qty; dst_index++) {
          const xrsr_dst_t *dst = &routes[index].dsts[dst_index];
-         XLOGD_INFO("dst <%s> audio format <%s>", dst->url, xrsr_audio_format_str(dst->format));
+         XLOGD_INFO("dst <%s> audio format <%s>", dst->url, xrsr_audio_format_bitmask_str(dst->formats));
       }
 
       index++;
@@ -1621,7 +1615,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             char uuid_str[37] = {'\0'};
             uuid_unparse_lower(session_config->uuid, uuid_str);
 
-            session_config->format = xrsr_audio_format_get(dst->format, begin->xraudio_format);
+            session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
 
             XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
@@ -1668,7 +1662,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                char uuid_str[37] = {'\0'};
                uuid_unparse_lower(session_config->uuid, uuid_str);
 
-               session_config->format = xrsr_audio_format_get(dst->format, begin->xraudio_format);
+               session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
 
                XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
@@ -1732,7 +1726,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                char uuid_str[37] = {'\0'};
                uuid_unparse_lower(session_config->uuid, uuid_str);
 
-               session_config->format = xrsr_audio_format_get(dst->format, begin->xraudio_format);
+               session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
 
                XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
@@ -2186,11 +2180,11 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
 
    xraudio_input_format_t xraudio_format = native_format;
 
-   switch(dst->format) {
+   switch(xrsr_audio_format_get(dst->formats, xraudio_format)) {
       case XRSR_AUDIO_FORMAT_PCM:    { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;   xraudio_format.sample_size = 2; break; }
-      case XRSR_AUDIO_FORMAT_ADPCM:  { xraudio_format.encoding = XRAUDIO_ENCODING_ADPCM; break; }
-      case XRSR_AUDIO_FORMAT_OPUS:   { xraudio_format.encoding = XRAUDIO_ENCODING_OPUS;  break; }
-      case XRSR_AUDIO_FORMAT_NATIVE: { break; }
+      // This forwards all ADPCM / OPUS as it's native format. If we need to change this, then xrsr_audio_format_t will need to support the different versions.
+      case XRSR_AUDIO_FORMAT_ADPCM:  { if(xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_XVP && xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_SKY) xraudio_format.encoding = XRAUDIO_ENCODING_ADPCM; break; }
+      case XRSR_AUDIO_FORMAT_OPUS:   { if(xraudio_format.encoding != XRAUDIO_ENCODING_OPUS_XVP)  xraudio_format.encoding = XRAUDIO_ENCODING_OPUS;  break; }
       default: {
          xraudio_format.encoding = XRAUDIO_ENCODING_INVALID;
          break;
@@ -2314,23 +2308,14 @@ void xrsr_msg_thread_poll(const xrsr_thread_params_t *params, xrsr_thread_state_
    }
 }
 
-xrsr_audio_format_t xrsr_audio_format_get(xrsr_audio_format_t format_dst, xraudio_input_format_t format_src) {
-   switch(format_dst) {
-      case XRSR_AUDIO_FORMAT_PCM:    { return(XRSR_AUDIO_FORMAT_PCM); }
-      case XRSR_AUDIO_FORMAT_ADPCM:  { return(XRSR_AUDIO_FORMAT_ADPCM); }
-      case XRSR_AUDIO_FORMAT_OPUS:   { return(XRSR_AUDIO_FORMAT_OPUS); }
-      case XRSR_AUDIO_FORMAT_NATIVE: {
-         if(format_src.encoding == XRAUDIO_ENCODING_PCM) {
-            return(XRSR_AUDIO_FORMAT_PCM);
-         } else if(format_src.encoding == XRAUDIO_ENCODING_OPUS  || format_src.encoding == XRAUDIO_ENCODING_OPUS_XVP) {
-            return(XRSR_AUDIO_FORMAT_OPUS);
-         } else if(format_src.encoding == XRAUDIO_ENCODING_ADPCM || format_src.encoding == XRAUDIO_ENCODING_ADPCM_XVP) {
-            return(XRSR_AUDIO_FORMAT_ADPCM);
-         }
-      }
-      case XRSR_AUDIO_FORMAT_INVALID: {
-      }
+xrsr_audio_format_t xrsr_audio_format_get(uint32_t formats_supported_dst, xraudio_input_format_t format_src) {
+   xrsr_audio_format_t ret = XRSR_AUDIO_FORMAT_NONE;
+   xrsr_audio_format_t src = xrsr_xraudio_format_to_xrsr(format_src);
+   if(src & formats_supported_dst) {
+      ret = src;
+   } else if(XRSR_AUDIO_FORMAT_PCM & formats_supported_dst) {
+      ret = XRSR_AUDIO_FORMAT_PCM;
    }
-   return(XRSR_AUDIO_FORMAT_INVALID);
+   return(ret);
 }
 

@@ -149,15 +149,38 @@ const char *xrsr_recv_msg_str(xrsr_recv_msg_t type) {
 
 const char *xrsr_audio_format_str(xrsr_audio_format_t format) {
    switch(format) {
-      case XRSR_AUDIO_FORMAT_NATIVE:   return("NATIVE");
       case XRSR_AUDIO_FORMAT_PCM:      return("PCM");
       case XRSR_AUDIO_FORMAT_ADPCM:    return("ADPCM");
       case XRSR_AUDIO_FORMAT_OPUS:     return("OPUS");
-      case XRSR_AUDIO_FORMAT_INVALID:  return("INVALID");
+      case XRSR_AUDIO_FORMAT_NONE:     return("NONE");
+      default: break;
    }
    return(xrsr_invalid_return(format));
 }
 
+const char *xrsr_audio_format_bitmask_str(uint32_t formats) {
+   static char str[32];
+   uint32_t i = 0;
+   bool comma = false;
+
+   if(formats == XRSR_AUDIO_FORMAT_NONE) {
+      return(xrsr_audio_format_str(formats));
+   }
+
+   str[0] = '\0';
+
+   for(i = 1; i < XRSR_AUDIO_FORMAT_MAX; i = i << 1) {
+      if(formats & i) {
+         if(comma) {
+            strlcat(str, ", ", sizeof(str));
+         }
+         strlcat(str, xrsr_audio_format_str(i), sizeof(str));
+         comma = true;
+      }
+   }
+
+   return(str);
+}
 
 const char *xrsr_stream_from_str(xrsr_stream_from_t stream_from) {
    switch(stream_from) {

@@ -286,6 +286,7 @@ void xrsr_xraudio_thread_poll(xrsr_xraudio_object_t object, xrsr_thread_poll_fun
 bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mode_t power_mode);
 bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable);
 bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled);
+xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format);
 
 void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 void xrsr_keyword_detect_error(xrsr_src_t src);

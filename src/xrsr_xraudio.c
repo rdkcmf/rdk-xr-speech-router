@@ -911,3 +911,27 @@ bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled) 
    return true;
 }
 
+xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format) {
+   xrsr_audio_format_t ret = XRSR_AUDIO_FORMAT_NONE;
+   switch(format.encoding) {
+      case XRAUDIO_ENCODING_PCM: {
+         ret = XRSR_AUDIO_FORMAT_PCM;
+         break;
+      }
+      case XRAUDIO_ENCODING_OPUS:
+      case XRAUDIO_ENCODING_OPUS_XVP: {
+         ret = XRSR_AUDIO_FORMAT_OPUS;
+         break;
+      }
+      case XRAUDIO_ENCODING_ADPCM:
+      case XRAUDIO_ENCODING_ADPCM_XVP:
+      case XRAUDIO_ENCODING_ADPCM_SKY: {
+         ret = XRSR_AUDIO_FORMAT_ADPCM;
+         break;
+      }
+      default: {
+         break;
+      }
+   }
+   return(ret);
+}

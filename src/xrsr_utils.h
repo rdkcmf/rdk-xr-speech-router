@@ -29,6 +29,7 @@ extern "C"
 const char *xrsr_queue_msg_type_str(xrsr_queue_msg_type_t type);
 const char *xrsr_xraudio_state_str(xrsr_xraudio_state_t type);
 const char *xrsr_audio_format_str(xrsr_audio_format_t format);
+const char *xrsr_audio_format_bitmask_str(uint32_t formats);
 const char *xrsr_stream_from_str(xrsr_stream_from_t stream_from);
 const char *xrsr_stream_until_str(xrsr_stream_until_t stream_until);
 const char *xrsr_power_mode_str(xrsr_power_mode_t power_mode);

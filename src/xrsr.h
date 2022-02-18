@@ -145,13 +145,13 @@ typedef enum {
 } xrsr_audio_container_t;
 
 /// @brief XRSR audio format types
-/// @details The audio format enumeration indicates all the audio formats which may be supported by xrsr apis.
+/// @details The audio format enumeration indicates all the audio formats which may be supported by xrsr apis. The values are structured so that they can also be used as a bitmap.
 typedef enum {
-   XRSR_AUDIO_FORMAT_NATIVE  = 0, ///< Native audio format (source)
-   XRSR_AUDIO_FORMAT_PCM     = 1, ///< PCM format
-   XRSR_AUDIO_FORMAT_ADPCM   = 2, ///< ADPCM format
-   XRSR_AUDIO_FORMAT_OPUS    = 3, ///< OPUS format
-   XRSR_AUDIO_FORMAT_INVALID = 4  ///< An invalid audio format
+   XRSR_AUDIO_FORMAT_NONE    = 0,      ///< No audio format
+   XRSR_AUDIO_FORMAT_PCM     = 1 << 0, ///< PCM format
+   XRSR_AUDIO_FORMAT_ADPCM   = 1 << 1, ///< ADPCM format
+   XRSR_AUDIO_FORMAT_OPUS    = 1 << 2, ///< OPUS format
+   XRSR_AUDIO_FORMAT_MAX     = 1 << 3  ///< The end of the audio format values (this must be the highest bit)
 } xrsr_audio_format_t;
 
 
@@ -418,7 +418,7 @@ typedef struct {
 typedef struct {
    const char *        url;                             ///< URL for the server which will handle requests
    xrsr_handlers_t     handlers;                        ///< Callback function handlers
-   xrsr_audio_format_t format;                          ///< Audio format to transmit to the destination
+   uint32_t            formats;                         ///< Bitmap of the audio formats supported by the destination
    uint16_t            stream_time_min;                 ///< Minimum duration of audio required before establishing a session with the server.  (in milliseconds)
    xrsr_stream_from_t  stream_from;                     ///< Point from which to begin streaming
    int32_t             stream_offset;                   ///< Offset in samples from the stream from point
