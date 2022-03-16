@@ -805,7 +805,7 @@ void St_Ws_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
       }
       case ACT_ENTER: {
          rdkx_timestamp_t timestamp;
-         rdkx_timestamp_get(&timestamp);
+         rdkx_timestamp_get_realtime(&timestamp);
          if(ws->handlers.disconnected == NULL) {
             XLOGD_INFO("disconnected handler not available");
          } else {

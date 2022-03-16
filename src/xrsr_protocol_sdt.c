@@ -423,7 +423,7 @@ void St_Sdt_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuard
       }
       case ACT_ENTER: {
          rdkx_timestamp_t timestamp;
-         rdkx_timestamp_get(&timestamp);
+         rdkx_timestamp_get_realtime(&timestamp);
          if(sdt->handlers.disconnected == NULL) {
             XLOGD_INFO("disconnected handler not available");
          } else {

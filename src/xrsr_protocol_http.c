@@ -702,7 +702,7 @@ void St_Http_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuar
         }
         case ACT_ENTER: {
             rdkx_timestamp_t timestamp;
-            rdkx_timestamp_get(&timestamp);
+            rdkx_timestamp_get_realtime(&timestamp);
             if(http->handlers.disconnected == NULL) {
                 XLOGD_INFO("disconnected handler not available");
             } else {
@@ -780,7 +780,7 @@ void St_Http_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
                 }
                 case SM_EVENT_CONNECTED: {
                     rdkx_timestamp_t timestamp;
-                    rdkx_timestamp_get(&timestamp);
+                    rdkx_timestamp_get_realtime(&timestamp);
                     if(http->handlers.connected == NULL) {
                         XLOGD_INFO("connected handler not available");
                     } else {
