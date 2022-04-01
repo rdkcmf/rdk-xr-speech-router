@@ -559,7 +559,8 @@ int xrsr_ws_send_text(xrsr_state_ws_t *ws, const uint8_t *buffer, uint32_t lengt
 
 void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
    XLOGD_INFO("");
-   xrsr_recv_msg_t msg_type = XRSR_RECV_MSG_INVALID;
+   xrsr_recv_msg_t msg_type      = XRSR_RECV_MSG_INVALID;
+   xrsr_recv_event_t recv_event  = XRSR_RECV_EVENT_NONE;
 
    // Check if we are building up a message
    if(ws->pending_msg != NULL && nopoll_msg_is_final(msg) == nopoll_true) {
@@ -602,12 +603,19 @@ void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
    if(ws->handlers.recv_msg == NULL) {
       XLOGD_ERROR("recv msg handler not available");
    } else {
-      if((*ws->handlers.recv_msg)(ws->handlers.data, msg_type, payload, size)) {
+      if((*ws->handlers.recv_msg)(ws->handlers.data, msg_type, payload, size, &recv_event)) {
          // Close the connection
          xrsr_ws_event(ws, SM_EVENT_APP_CLOSE, false);
       }
    }
    nopoll_msg_unref(msg);
+
+  if((unsigned int)recv_event < XRSR_RECV_EVENT_NONE) {
+     ws->stream_end_reason  = (recv_event == XRSR_RECV_EVENT_EOS_SERVER ? XRSR_STREAM_END_REASON_AUDIO_EOF : XRSR_STREAM_END_REASON_DISCONNECT_REMOTE);
+     ws->session_end_reason = (recv_event == XRSR_RECV_EVENT_EOS_SERVER ? XRSR_SESSION_END_REASON_EOS      : XRSR_SESSION_END_REASON_ERROR_WS_SEND);
+     XLOGD_INFO("recv_event %s", xrsr_recv_event_str(recv_event));
+     xrsr_ws_event(ws, SM_EVENT_EOS_PIPE, true);
+  }
 }
 
 void xrsr_ws_on_close(noPollCtx *ctx, noPollConn *conn, noPollPtr user_data) {

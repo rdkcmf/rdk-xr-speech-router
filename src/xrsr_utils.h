@@ -35,6 +35,7 @@ const char *xrsr_stream_until_str(xrsr_stream_until_t stream_until);
 const char *xrsr_power_mode_str(xrsr_power_mode_t power_mode);
 const char *xrsr_address_family_str(xrsr_address_family_t family);
 const char *xrsr_event_str(xrsr_event_t event);
+const char *xrsr_recv_event_str(xrsr_recv_event_t recv_event);
 
 #ifdef HTTP_ENABLED
 const char *xrsr_curlmcode_str(CURLMcode code);

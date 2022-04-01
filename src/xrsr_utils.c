@@ -241,6 +241,16 @@ const char *xrsr_audio_container_str(xrsr_audio_container_t container) {
    return(xrsr_invalid_return(container));
 }
 
+const char *xrsr_recv_event_str(xrsr_recv_event_t recv_event) {
+   switch(recv_event) {
+      case XRSR_RECV_EVENT_EOS_SERVER:        return("EOS SERVER");
+      case XRSR_RECV_EVENT_DISCONNECT_REMOTE: return("DISCONNECT REMOTE");
+      case XRSR_RECV_EVENT_NONE:              return("NONE");
+      case XRSR_RECV_EVENT_INVALID:           return("INVALID");
+   }
+   return(xrsr_invalid_return(recv_event));
+}
+
 bool xrsr_url_parse(const char *url, xrsr_url_parts_t *url_parts) {
    if(url == NULL) {
       XLOGD_ERROR("NULL url");

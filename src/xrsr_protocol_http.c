@@ -571,7 +571,7 @@ void xrsr_http_handle_fds(xrsr_state_http_t *http, int size, fd_set *readfds, fd
                     if(NULL == temp->handlers.recv_msg) {
                         XLOGD_WARN("NULL recv_msg handler");
                     } else {
-                        (*temp->handlers.recv_msg)(temp->handlers.data, XRSR_RECV_MSG_TEXT, (uint8_t *)temp->write_buffer, strnlen(temp->write_buffer, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX));
+                        (*temp->handlers.recv_msg)(temp->handlers.data, XRSR_RECV_MSG_TEXT, (uint8_t *)temp->write_buffer, strnlen(temp->write_buffer, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX), NULL);
                     }
                     temp->session_stats.ret_code_internal = XRSR_RET_CODE_INTERNAL_SUCCESS;
                     temp->session_stats.ret_code_protocol = 200;

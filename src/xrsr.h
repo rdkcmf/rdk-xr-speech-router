@@ -184,6 +184,13 @@ typedef enum {
    XRSR_POWER_MODE_INVALID = 3, ///< Invalid power mode type
 } xrsr_power_mode_t;
 
+
+typedef enum {
+   XRSR_RECV_EVENT_EOS_SERVER        = 0,
+   XRSR_RECV_EVENT_DISCONNECT_REMOTE = 1,
+   XRSR_RECV_EVENT_NONE              = 2,
+   XRSR_RECV_EVENT_INVALID           = 3,
+} xrsr_recv_event_t;
 /// @}
 
 /// @addtogroup XRSR_STRUCTS
@@ -390,7 +397,7 @@ typedef void (*xrsr_handler_disconnected_t)(void *data, const uuid_t uuid, xrsr_
 /// @param[in] buffer A pointer to the received message.
 /// @param[in] length The length of the received message (in bytes).
 /// @return The function returns true if successful or false otherwise.
-typedef bool (*xrsr_handler_recv_msg_t)(void *data, xrsr_recv_msg_t type, const uint8_t *buffer, uint32_t length);
+typedef bool (*xrsr_handler_recv_msg_t)(void *data, xrsr_recv_msg_t type, const uint8_t *buffer, uint32_t length, xrsr_recv_event_t *event);
 
 /// @brief XRSR thread poll handler
 /// @details Callback function prototype for polling XRSR thread.
