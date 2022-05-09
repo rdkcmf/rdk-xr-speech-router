@@ -57,6 +57,8 @@
 
 #define XRSR_SESSION_BY_TEXT_MAX_LENGTH   (128)   ///< Maximum text string length for text-only sessions
 
+#define XRSR_QUERY_STRING_QTY_MAX         (24)    ///< Maximum quantity of query strings supported
+
 /// @}
 
 /// @addtogroup XRSR_ENUMS
@@ -201,42 +203,46 @@ typedef struct {
 /// @brief XRSR HTTP session configuration structure
 /// @details The HTTP session configuration data structure provides detailed information to be used in a connection using the HTTP/S protocols.
 typedef struct {
-   uuid_t              uuid;                                ///< Session's universally unique identifier
-   xrsr_audio_format_t format;                              ///< Outgoing audio format
-   char                sat_token[XRSR_SAT_TOKEN_LEN_MAX];   ///< NULL-terminated string containing the SAT token
-   char                user_agent[XRSR_USER_AGENT_LEN_MAX]; ///< NULL-terminated string containing the user agent field
-   const char **       query_strs;                          ///< Pointer to a variable length array of query string parameters.  Last element in the array must be NULL.
-   uint32_t            keyword_begin;                       ///< Sample index at which keyword begins
-   uint32_t            keyword_duration;                    ///< Duration of keyword, in samples
-} xrsr_session_configuration_http_t;
+   const char *        sat_token;                                 ///< NULL-terminated string containing the SAT token
+   const char *        user_agent;                                ///< NULL-terminated string containing the user agent field
+   const char *        query_strs[XRSR_QUERY_STRING_QTY_MAX + 1]; ///< Pointer to an array of query string parameters.  Last element in the array must be NULL.
+   uint32_t            keyword_begin;                             ///< Sample index at which keyword begins
+   uint32_t            keyword_duration;                          ///< Duration of keyword, in samples
+} xrsr_session_config_in_http_t;
 
 /// @brief XRSR websocket session configuration structure
 /// @details The websocket session configuration data structure provides detailed information to be used in a connection using the WS/S protocols.
 typedef struct {
-   uuid_t              uuid;                              ///< Session's universally unique identifier
-   xrsr_audio_format_t format;                            ///< Outgoing audio format
-   bool                user_initiated;                    ///< Indicates whether the session was initiated directly by the user (ie. pressing a button)
-   char                sat_token[XRSR_SAT_TOKEN_LEN_MAX]; ///< NULL-terminated string containing the SAT token
-   const char **       query_strs;                        ///< Pointer to a variable length array of query string parameters.  Last element in the array must be NULL.
-   uint32_t            keyword_begin;                     ///< Sample index at which keyword begins
-   uint32_t            keyword_duration;                  ///< Duration of keyword, in samples
-} xrsr_session_configuration_ws_t;
+   const char *        sat_token;                                   ///< NULL-terminated string containing the SAT token
+   const char *        query_strs[XRSR_QUERY_STRING_QTY_MAX + 1];   ///< Pointer to an array of query string parameters.  Last element in the array must be NULL.
+   uint32_t            keyword_begin;                               ///< Sample index at which keyword begins
+   uint32_t            keyword_duration;                            ///< Duration of keyword, in samples
+   void *              app_config;                                  ///< Opaque application config
+} xrsr_session_config_in_ws_t;
 
 /// @brief XRSR SDT session configuration structure
 /// @details The SDT session configuration data structure provide detailed information to be used in a connectioN.
 typedef struct {
-   uuid_t              uuid;                              ///< Session's universally unique identifier
-   xrsr_audio_format_t format;                            ///< Outgoing audio format
-   bool                user_initiated;                    ///< Indicates whether the session was initiated directly by the user (ie. pressing a button)
-} xrsr_session_configuration_sdt_t;
+   void               *reserved;
+} xrsr_session_config_in_sdt_t;
 
-/// @brief XRSR session configuration structure
-/// @details The session configuration data structure provides detailed information to be used in a speech router session.
+/// @brief XRSR session configuration input structure
+/// @details The session configuration input data structure provides detailed information to be used in a speech router session.
 typedef union {
-   xrsr_session_configuration_http_t http; ///< HTTP session configuration
-   xrsr_session_configuration_ws_t   ws;   ///< Websockets session configuration
-   xrsr_session_configuration_sdt_t  sdt;   ///< SDT session configuration
-} xrsr_session_configuration_t;
+   xrsr_session_config_in_http_t http; ///< HTTP session configuration
+   xrsr_session_config_in_ws_t   ws;   ///< Websockets session configuration
+   xrsr_session_config_in_sdt_t  sdt;  ///< SDT session configuration
+} xrsr_session_config_in_t;
+
+typedef void (*xrsr_callback_session_config_t)(const uuid_t uuid, xrsr_session_config_in_t *configuration);
+
+/// @brief XRSR session configuration output structure
+/// @details The session configuration output data structure provides detailed information to be used in a speech router session.
+typedef struct {
+   xrsr_audio_format_t            format;                         ///< Outgoing audio format
+   bool                           user_initiated;                 ///< Indicates whether the session was initiated directly by the user (ie. pressing a button)
+   xrsr_callback_session_config_t cb_session_config;              ///< If not NULL, function for the application to return input session config
+} xrsr_session_config_out_t;
 
 /// @brief XRSR audio stats structure
 /// @details The audio statistics data structure indicates the statistics for an audio stream.
@@ -318,9 +324,17 @@ typedef xrsr_result_t (*xrsr_handler_send_t)(void *param, const uint8_t *buffer,
 /// @param[in]    src             The source type in use
 /// @param[in]    dst_index       The zero based index of the route's destination
 /// @param[in]    detector_result Results of the detection event or NULL if no detection is associated with the session
-/// @param[inout] configuration   Configuration information for the session
+/// @param[in]    config_out      Configuration output information for the session
+/// @param[out]   config_in       Configuration input information for the session
 /// @return The function has no return value.
-typedef void (*xrsr_handler_session_begin_t)(void *data, const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xrsr_keyword_detector_result_t *detector_result, xrsr_session_configuration_t *configuration, rdkx_timestamp_t *timestamp, const char *transcription_in);
+typedef void (*xrsr_handler_session_begin_t)(void *data, const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xrsr_keyword_detector_result_t *detector_result, xrsr_session_config_out_t *config_out, xrsr_session_config_in_t *config_in, rdkx_timestamp_t *timestamp, const char *transcription_in);
+
+/// @brief XRSR session config handler
+/// @details Callback function prototype for handling session config events.
+/// @param[in]    uuid            The universally unique identifier for the session
+/// @param[inout] config_in       Configuration input information for the session
+/// @return The function has no return value.
+typedef void (*xrsr_handler_session_config_t)(void *data, const uuid_t uuid, xrsr_session_config_in_t *config_in);
 
 /// @brief XRSR session end handler
 /// @details Callback function prototype for handling session end events.
@@ -400,17 +414,18 @@ typedef int (*xrsr_handler_stream_audio_t)(unsigned char* buffer,uint32_t length
 /// @brief XRSR handlers structure
 /// @details The handlers data structure is used to store the callback function handlers for a given route.
 typedef struct {
-   void *                       data;          ///< Optional parameter passed to each handler
-   xrsr_handler_session_begin_t session_begin; ///< Called when a session begins
-   xrsr_handler_session_end_t   session_end;   ///< Called when a session ends
-   xrsr_handler_stream_begin_t  stream_begin;  ///< Called when a session's audio stream begins
-   xrsr_handler_stream_kwd_t    stream_kwd;    ///< Called when they keyword is passed in the stream
-   xrsr_handler_stream_audio_t  stream_audio;   ///< Called when the protocol streaming the audio to destinatio
-   xrsr_handler_stream_end_t    stream_end;    ///< Called when a sessino's audio stream ends
-   xrsr_handler_source_error_t  source_error;  ///< Called when an error occurs with the input source
-   xrsr_handler_connected_t     connected;     ///< Called when the protocol connects to the server
-   xrsr_handler_disconnected_t  disconnected;  ///< Called when the protocol disconnects from the server
-   xrsr_handler_recv_msg_t      recv_msg;      ///< Called when a message payload is received from the server
+   void *                        data;           ///< Optional parameter passed to each handler
+   xrsr_handler_session_begin_t  session_begin;  ///< Called when a session begins
+   xrsr_handler_session_config_t session_config; ///< Called when a session is configured
+   xrsr_handler_session_end_t    session_end;    ///< Called when a session ends
+   xrsr_handler_stream_begin_t   stream_begin;   ///< Called when a session's audio stream begins
+   xrsr_handler_stream_kwd_t     stream_kwd;     ///< Called when they keyword is passed in the stream
+   xrsr_handler_stream_audio_t   stream_audio;   ///< Called when the protocol streaming the audio to destinatio
+   xrsr_handler_stream_end_t     stream_end;     ///< Called when a sessino's audio stream ends
+   xrsr_handler_source_error_t   source_error;   ///< Called when an error occurs with the input source
+   xrsr_handler_connected_t      connected;      ///< Called when the protocol connects to the server
+   xrsr_handler_disconnected_t   disconnected;   ///< Called when the protocol disconnects from the server
+   xrsr_handler_recv_msg_t       recv_msg;       ///< Called when a message payload is received from the server
 } xrsr_handlers_t;
 
 /// @brief XRSR route structure

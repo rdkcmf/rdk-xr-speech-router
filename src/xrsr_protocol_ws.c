@@ -328,7 +328,7 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
             ws->audio_txd_bytes += bytes_read;
          }
          if(!ws->audio_kwd_notified && (ws->audio_txd_bytes >= ws->audio_kwd_bytes)) {
-            if(!xrsr_speech_stream_kwd(ws->session_configuration.ws.uuid,  ws->audio_src, ws->dst_index)) {
+            if(!xrsr_speech_stream_kwd(ws->uuid,  ws->audio_src, ws->dst_index)) {
                XLOGD_ERROR("xrsr_speech_stream_kwd failed");
             }
             ws->audio_kwd_notified = true;
@@ -343,7 +343,7 @@ void xrsr_ws_process_timeout(void *data) {
    xrsr_ws_event(ws, SM_EVENT_TIMEOUT, false);
 }
 
-bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, bool user_initiated, bool is_retry, bool deferred, const char *sat_token, const char **query_strs) {
+bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, bool user_initiated, bool is_retry, bool deferred, const char **query_strs) {
    XLOGD_INFO("");
    if(ws == NULL) {
       XLOGD_ERROR("NULL xrsr_state_ws_t");
@@ -378,12 +378,11 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
       } while(*query_strs != NULL);
    }
 
-   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> sat <%s> family <%s> retry period <%u> ms", ws->local_host_name, url_parts->host, url_parts->port_str, ws->url, (deferred) ? "YES" : "NO", (sat_token == NULL) ? "NO" : "YES", xrsr_address_family_str(url_parts->family), ws->timeout_session);
+   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> family <%s> retry period <%u> ms", ws->local_host_name, url_parts->host, url_parts->port_str, ws->url, (deferred) ? "YES" : "NO", xrsr_address_family_str(url_parts->family), ws->timeout_session);
 
    nopoll_conn_connect_timeout(ws->obj_ctx, ws->timeout_connect * 1000);  // wait no more than N milliseconds
 
    ws->url_parts          = url_parts;
-   ws->sat_token          = sat_token;
    ws->user_initiated     = user_initiated;
    ws->audio_kwd_notified = true; // if keyword is present in the stream, xraudio will inform
    ws->audio_kwd_bytes    = 0;
@@ -403,7 +402,7 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
 
 bool xrsr_ws_connect_new(xrsr_state_ws_t *ws) {
    xrsr_url_parts_t *url_parts = ws->url_parts;
-   noPollConnOpts *nopoll_opts = xrsr_conn_opts_get(ws->sat_token);
+   noPollConnOpts *nopoll_opts = xrsr_conn_opts_get(ws->session_config_in.ws.sat_token);
 
    const char *origin_fmt = "http://%s:%s";
    uint32_t origin_size = strlen(url_parts->host) + strlen(url_parts->port_str) + strlen(origin_fmt) - 3;
@@ -490,7 +489,7 @@ bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src) {
 
    // Continue streaming audio to the websocket
    int pipe_fd_read = -1;
-   if(!xrsr_speech_stream_begin(ws->session_configuration.ws.uuid, ws->audio_src, ws->dst_index, ws->xraudio_format, ws->user_initiated, &pipe_fd_read)) {
+   if(!xrsr_speech_stream_begin(ws->uuid, ws->audio_src, ws->dst_index, ws->xraudio_format, ws->user_initiated, &pipe_fd_read)) {
       XLOGD_ERROR("xrsr_speech_stream_begin failed");
       // perform clean up of the session
       xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -500,8 +499,8 @@ bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src) {
    ws->audio_pipe_fd_read = pipe_fd_read;
 
    char uuid_str[37] = {'\0'};
-   uuid_unparse_lower(ws->session_configuration.ws.uuid, uuid_str);
-   xrsr_session_stream_begin(ws->session_configuration.ws.uuid, uuid_str, ws->audio_src, ws->dst_index);
+   uuid_unparse_lower(ws->uuid, uuid_str);
+   xrsr_session_stream_begin(ws->uuid, uuid_str, ws->audio_src, ws->dst_index);
 
    return(true);
 }
@@ -626,7 +625,7 @@ void xrsr_ws_on_close(noPollCtx *ctx, noPollConn *conn, noPollPtr user_data) {
 void xrsr_ws_speech_stream_end(xrsr_state_ws_t *ws, xrsr_stream_end_reason_t reason, bool detect_resume) {
    XLOGD_INFO("fd <%d> reason <%s>", ws->audio_pipe_fd_read, xrsr_stream_end_reason_str(reason));
 
-   xrsr_speech_stream_end(ws->session_configuration.ws.uuid, ws->audio_src, ws->dst_index, reason, detect_resume, &ws->audio_stats);
+   xrsr_speech_stream_end(ws->uuid, ws->audio_src, ws->dst_index, reason, detect_resume, &ws->audio_stats);
 
    if(ws->audio_pipe_fd_read >= 0) {
       close(ws->audio_pipe_fd_read);
@@ -640,8 +639,8 @@ void xrsr_ws_speech_session_end(xrsr_state_ws_t *ws, xrsr_session_end_reason_t r
    ws->stats.reason = reason;
 
    char uuid_str[37] = {'\0'};
-   uuid_unparse_lower(ws->session_configuration.ws.uuid, uuid_str);
-   xrsr_session_end(ws->session_configuration.ws.uuid, uuid_str, ws->audio_src, ws->dst_index, &ws->stats);
+   uuid_unparse_lower(ws->uuid, uuid_str);
+   xrsr_session_end(ws->uuid, uuid_str, ws->audio_src, ws->dst_index, &ws->stats);
 }
 
 const char *xrsr_ws_opcode_str(noPollOpCode type) {
@@ -809,7 +808,7 @@ void St_Ws_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
          if(ws->handlers.disconnected == NULL) {
             XLOGD_INFO("disconnected handler not available");
          } else {
-            (*ws->handlers.disconnected)(ws->handlers.data, ws->session_configuration.ws.uuid, ws->session_end_reason, false, &ws->detect_resume, &timestamp);
+            (*ws->handlers.disconnected)(ws->handlers.data, ws->uuid, ws->session_end_reason, false, &ws->detect_resume, &timestamp);
          }
          xrsr_ws_speech_session_end(ws, ws->session_end_reason);
          xrsr_ws_reset(ws);
@@ -1164,12 +1163,12 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
          } else {
             rdkx_timestamp_t timestamp;
             rdkx_timestamp_get_realtime(&timestamp);
-            success = (*ws->handlers.connected)(ws->handlers.data, ws->session_configuration.ws.uuid, xrsr_conn_send, (void *)ws, &timestamp);
+            success = (*ws->handlers.connected)(ws->handlers.data, ws->uuid, xrsr_conn_send, (void *)ws, &timestamp);
          }
 
          char uuid_str[37] = {'\0'};
-         uuid_unparse_lower(ws->session_configuration.ws.uuid, uuid_str);
-         xrsr_session_stream_begin(ws->session_configuration.ws.uuid, uuid_str, ws->audio_src, ws->dst_index);
+         uuid_unparse_lower(ws->uuid, uuid_str);
+         xrsr_session_stream_begin(ws->uuid, uuid_str, ws->audio_src, ws->dst_index);
 
          if (success && ws->is_session_by_text) {
             xrsr_ws_event(ws, SM_EVENT_TEXT_SESSION_SUCCESS, true);

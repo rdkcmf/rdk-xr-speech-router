@@ -24,6 +24,7 @@
 #include <semaphore.h>
 #include <bsd/string.h>
 #include <errno.h>
+#include "safec_lib.h"
 #include <rdkx_logger.h>
 #include <xr_timestamp.h>
 #include <xr_timer.h>
@@ -45,11 +46,12 @@ typedef enum {
    XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECTED      = 10,
    XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_ERROR  = 11,
    XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN         = 12,
-   XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE     = 13,
-   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START = 14,
-   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP  = 15,
-   XRSR_QUEUE_MSG_TYPE_THREAD_POLL           = 16,
-   XRSR_QUEUE_MSG_TYPE_INVALID               = 17,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN     = 13,
+   XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE     = 14,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START = 15,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP  = 16,
+   XRSR_QUEUE_MSG_TYPE_THREAD_POLL           = 17,
+   XRSR_QUEUE_MSG_TYPE_INVALID               = 18,
 } xrsr_queue_msg_type_t;
 
 typedef enum {
@@ -159,7 +161,7 @@ typedef struct {
 } xrsr_queue_msg_keyword_detected_t;
 
 typedef struct {
-   xrsr_queue_msg_header_t header;
+   xrsr_queue_msg_header_t           header;
    xrsr_src_t                        src;
    bool                              retry;
    bool                              user_initiated;
@@ -169,6 +171,18 @@ typedef struct {
    rdkx_timestamp_t                  timestamp;
    char                              transcription_in[XRSR_SESSION_BY_TEXT_MAX_LENGTH];
 } xrsr_queue_msg_session_begin_t;
+
+typedef struct {
+   xrsr_queue_msg_header_t header;
+   xrsr_protocol_t         protocol;
+   uuid_t                  uuid;
+   const char *            sat_token;
+   const char *            user_agent;
+   const char *            query_strs[XRSR_QUERY_STRING_QTY_MAX];
+   uint32_t                keyword_begin;
+   uint32_t                keyword_duration;
+   void *                  app_config;
+} xrsr_queue_msg_session_config_in_t;
 
 typedef struct {
    xrsr_queue_msg_header_t header;
@@ -222,6 +236,7 @@ typedef union {
    xrsr_queue_msg_keyword_update_t        keyword_update;
    xrsr_queue_msg_keyword_detected_t      keyword_detected;
    xrsr_queue_msg_session_begin_t         session_begin;
+   xrsr_queue_msg_session_config_in_t     session_config_in;
    xrsr_queue_msg_session_terminate_t     session_terminate;
    xrsr_queue_msg_xraudio_in_event_t      xraudio_in_event;
    xrsr_queue_msg_session_capture_start_t session_capture_start;

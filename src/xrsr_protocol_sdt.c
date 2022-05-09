@@ -142,7 +142,7 @@ void xrsr_sdt_handle_fds(xrsr_state_sdt_t *sdt, fd_set *readfds, fd_set *writefd
          }
 
          if(!sdt->audio_kwd_notified && (sdt->audio_txd_bytes >= sdt->audio_kwd_bytes)) {
-            if(!xrsr_speech_stream_kwd(sdt->session_configuration.sdt.uuid,  sdt->audio_src, sdt->dst_index)) {
+            if(!xrsr_speech_stream_kwd(sdt->uuid,  sdt->audio_src, sdt->dst_index)) {
                XLOGD_ERROR("xrsr_speech_stream_kwd failed");
             }
             sdt->audio_kwd_notified = true;
@@ -239,7 +239,7 @@ bool xrsr_sdt_audio_stream(xrsr_state_sdt_t *sdt, xrsr_src_t src) {
 
    // Continue streaming audio to the websocket
    int pipe_fd_read = -1;
-   if(!xrsr_speech_stream_begin(sdt->session_configuration.sdt.uuid, sdt->audio_src, sdt->dst_index, sdt->xraudio_format, sdt->user_initiated, &pipe_fd_read)) {
+   if(!xrsr_speech_stream_begin(sdt->uuid, sdt->audio_src, sdt->dst_index, sdt->xraudio_format, sdt->user_initiated, &pipe_fd_read)) {
       XLOGD_ERROR("xrsr_speech_stream_begin failed");
       // perform clean up of the session
       xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -249,8 +249,8 @@ bool xrsr_sdt_audio_stream(xrsr_state_sdt_t *sdt, xrsr_src_t src) {
    sdt->audio_pipe_fd_read = pipe_fd_read;
 
    char uuid_str[37] = {'\0'};
-   uuid_unparse_lower(sdt->session_configuration.sdt.uuid, uuid_str);
-   xrsr_session_stream_begin(sdt->session_configuration.sdt.uuid, uuid_str,sdt->audio_src, sdt->dst_index);
+   uuid_unparse_lower(sdt->uuid, uuid_str);
+   xrsr_session_stream_begin(sdt->uuid, uuid_str,sdt->audio_src, sdt->dst_index);
 
    return(true);
 }
@@ -293,7 +293,7 @@ int xrsr_sdt_send_text(xrsr_state_sdt_t *sdt, const uint8_t *buffer, uint32_t le
 void xrsr_sdt_speech_stream_end(xrsr_state_sdt_t *sdt, xrsr_stream_end_reason_t reason, bool detect_resume) {
    XLOGD_INFO("fd <%d> reason <%s>", sdt->audio_pipe_fd_read, xrsr_stream_end_reason_str(reason));
 
-   xrsr_speech_stream_end(sdt->session_configuration.sdt.uuid, sdt->audio_src, sdt->dst_index, reason, detect_resume, &sdt->audio_stats);
+   xrsr_speech_stream_end(sdt->uuid, sdt->audio_src, sdt->dst_index, reason, detect_resume, &sdt->audio_stats);
 
    if(sdt->audio_pipe_fd_read >= 0) {
       close(sdt->audio_pipe_fd_read);
@@ -307,8 +307,8 @@ void xrsr_sdt_speech_session_end(xrsr_state_sdt_t *sdt, xrsr_session_end_reason_
    sdt->stats.reason = reason;
 
    char uuid_str[37] = {'\0'};
-   uuid_unparse_lower(sdt->session_configuration.sdt.uuid, uuid_str);
-   xrsr_session_end(sdt->session_configuration.sdt.uuid, uuid_str, sdt->audio_src, sdt->dst_index, &sdt->stats);
+   uuid_unparse_lower(sdt->uuid, uuid_str);
+   xrsr_session_end(sdt->uuid, uuid_str, sdt->audio_src, sdt->dst_index, &sdt->stats);
 }
 
 void xrsr_sdt_handle_speech_event(xrsr_state_sdt_t *sdt, xrsr_speech_event_t *event) {
@@ -427,7 +427,7 @@ void St_Sdt_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuard
          if(sdt->handlers.disconnected == NULL) {
             XLOGD_INFO("disconnected handler not available");
          } else {
-            (*sdt->handlers.disconnected)(sdt->handlers.data, sdt->session_configuration.sdt.uuid, sdt->session_end_reason, false, &sdt->detect_resume, &timestamp);
+            (*sdt->handlers.disconnected)(sdt->handlers.data, sdt->uuid, sdt->session_end_reason, false, &sdt->detect_resume, &timestamp);
          }
          xrsr_sdt_speech_session_end(sdt, sdt->session_end_reason);
          xrsr_sdt_reset(sdt);
@@ -728,12 +728,12 @@ void St_Sdt_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRes
          } else {
             rdkx_timestamp_t timestamp;
             rdkx_timestamp_get_realtime(&timestamp);
-            (*sdt->handlers.connected)(sdt->handlers.data, sdt->session_configuration.sdt.uuid, xrsr_conn_send, (void *)sdt, &timestamp);
+            (*sdt->handlers.connected)(sdt->handlers.data, sdt->uuid, xrsr_conn_send, (void *)sdt, &timestamp);
          }
 
          char uuid_str[37] = {'\0'};
-         uuid_unparse_lower(sdt->session_configuration.sdt.uuid, uuid_str);
-         xrsr_session_stream_begin(sdt->session_configuration.sdt.uuid, uuid_str, sdt->audio_src, sdt->dst_index);
+         uuid_unparse_lower(sdt->uuid, uuid_str);
+         xrsr_session_stream_begin(sdt->uuid, uuid_str, sdt->audio_src, sdt->dst_index);
          break;
       }
       case ACT_EXIT: {

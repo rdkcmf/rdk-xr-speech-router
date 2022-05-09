@@ -359,8 +359,8 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
         http->chunk = curl_slist_append(http->chunk, "Content-Type:application/octet-stream");
     }
 
-    if(http->session_configuration.http.sat_token[0] != '\0') {
-       snprintf(sat_token_str, sizeof(sat_token_str), "Authorization: Bearer %s", http->session_configuration.http.sat_token);
+    if(http->session_config_in.http.sat_token[0] != '\0') {
+       snprintf(sat_token_str, sizeof(sat_token_str), "Authorization: Bearer %s", http->session_config_in.http.sat_token);
        http->chunk = curl_slist_append(http->chunk, sat_token_str);
     }
     http->chunk = curl_slist_append(http->chunk, "Expect:");
@@ -380,8 +380,8 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
     curl_easy_setopt(http->easy_handle, CURLOPT_CONNECTTIMEOUT, 5L);
     curl_easy_setopt(http->easy_handle, CURLOPT_PRIVATE, (void *)http);
     curl_easy_setopt(http->easy_handle, CURLOPT_HTTPHEADER, http->chunk);
-    if(http->session_configuration.http.user_agent[0] != '\0') {
-       curl_easy_setopt(http->easy_handle, CURLOPT_USERAGENT, http->session_configuration.http.user_agent);
+    if(http->session_config_in.http.user_agent[0] != '\0') {
+       curl_easy_setopt(http->easy_handle, CURLOPT_USERAGENT, http->session_config_in.http.user_agent);
     }
     curl_easy_setopt(http->easy_handle, CURLOPT_FORBID_REUSE, 1);
     curl_easy_setopt(http->easy_handle, CURLOPT_FOLLOWLOCATION, 1L);
@@ -420,7 +420,7 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
        } while(*query_strs != NULL);
     }
 
-    XLOGD_INFO("user agent <%s>", http->session_configuration.http.user_agent);
+    XLOGD_INFO("user agent <%s>", http->session_config_in.http.user_agent);
     XLOGD_INFO("url <%s>", url);
 
     // Set the URL / Port
@@ -706,11 +706,11 @@ void St_Http_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuar
             if(http->handlers.disconnected == NULL) {
                 XLOGD_INFO("disconnected handler not available");
             } else {
-                (*http->handlers.disconnected)(http->handlers.data, http->session_configuration.http.uuid, http->session_stats.reason, false, &http->detect_resume, &timestamp);
+                (*http->handlers.disconnected)(http->handlers.data, http->uuid, http->session_stats.reason, false, &http->detect_resume, &timestamp);
             }
             char uuid_str[37] = {'\0'};
-            uuid_unparse_lower(http->session_configuration.http.uuid, uuid_str);
-            xrsr_session_end(http->session_configuration.http.uuid, uuid_str, http->audio_src, http->dst_index, &http->session_stats);
+            uuid_unparse_lower(http->uuid, uuid_str);
+            xrsr_session_end(http->uuid, uuid_str, http->audio_src, http->dst_index, &http->session_stats);
 
             xrsr_http_reset(http);
             break;
@@ -733,12 +733,12 @@ void St_Http_Buffering(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
         case ACT_EXIT: {
             switch(pEvent->mID) {
                 case SM_EVENT_EOS: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION;
                     break;
                 }
                 case SM_EVENT_TERMINATE: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_TERMINATE;
                     break;
                 }
@@ -774,7 +774,7 @@ void St_Http_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
         case ACT_EXIT: {
             switch(pEvent->mID) {
                 case SM_EVENT_DISCONNECTED: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DID_NOT_BEGIN, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE;
                     break;
                 }
@@ -784,7 +784,7 @@ void St_Http_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
                     if(http->handlers.connected == NULL) {
                         XLOGD_INFO("connected handler not available");
                     } else {
-                        (*http->handlers.connected)(http->handlers.data, http->session_configuration.http.uuid, NULL, NULL, &timestamp);
+                        (*http->handlers.connected)(http->handlers.data, http->uuid, NULL, NULL, &timestamp);
                     }
                     break;
                 }
@@ -857,8 +857,8 @@ void St_Http_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
         }
         case ACT_ENTER: {
             char uuid_str[37] = {'\0'};
-            uuid_unparse_lower(http->session_configuration.http.uuid, uuid_str);
-            xrsr_session_stream_begin(http->session_configuration.http.uuid, uuid_str, http->audio_src, http->dst_index);
+            uuid_unparse_lower(http->uuid, uuid_str);
+            xrsr_session_stream_begin(http->uuid, uuid_str, http->audio_src, http->dst_index);
             if (http->is_session_by_text) {
                 xrsr_http_event(http, SM_EVENT_TEXT_SESSION_SUCCESS, true);
             }
@@ -867,17 +867,17 @@ void St_Http_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
         case ACT_EXIT: {
             switch(pEvent->mID) {
                 case SM_EVENT_TERMINATE: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_LOCAL, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_LOCAL, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_TERMINATE;
                     break;
                 }
                 case SM_EVENT_MSG_RECV: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_REMOTE, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_REMOTE, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE;
                     break;
                 }
                 case SM_EVENT_PIPE_EOS: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_AUDIO_EOF, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_AUDIO_EOF, http->detect_resume, &http->audio_stats);
                     break;
                 }
                 case SM_EVENT_TEXT_SESSION_SUCCESS: {
@@ -911,17 +911,17 @@ void St_Http_TextOnlySession(tStateEvent *pEvent, eStateAction eAction, BOOL *bG
         case ACT_EXIT: {
             switch(pEvent->mID) {
                 case SM_EVENT_TERMINATE: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_LOCAL, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_DISCONNECT_LOCAL, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_TERMINATE;
                     break;
                 }
                 case SM_EVENT_MSG_RECV: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_INVALID, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_INVALID, http->detect_resume, &http->audio_stats);
                     http->session_stats.reason = XRSR_SESSION_END_REASON_EOT;
                     break;
                 }
                 case SM_EVENT_PIPE_EOS: {
-                    xrsr_speech_stream_end(http->session_configuration.http.uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_AUDIO_EOF, http->detect_resume, &http->audio_stats);
+                    xrsr_speech_stream_end(http->uuid, http->audio_src, http->dst_index, XRSR_STREAM_END_REASON_AUDIO_EOF, http->detect_resume, &http->audio_stats);
                     break;
                 }
                 default: {

@@ -133,6 +133,8 @@ typedef struct {
 
 static void xrsr_session_stream_kwd(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, uint32_t dst_index);
 static void xrsr_session_stream_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, uint32_t dst_index, xrsr_stream_stats_t *stats);
+static void xrsr_callback_session_config_in_http(const uuid_t uuid, xrsr_session_config_in_t *config_in);
+static void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_config_in_t *config_in);
 
 typedef void (*xrsr_msg_handler_t)(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 
@@ -149,6 +151,7 @@ static void xrsr_msg_xraudio_event        (const xrsr_thread_params_t *params, x
 static void xrsr_msg_keyword_detected     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_keyword_detect_error (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_session_begin        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_config_in    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_session_terminate    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_session_capture_start(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_session_capture_stop (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
@@ -168,6 +171,7 @@ static const xrsr_msg_handler_t g_xrsr_msg_handlers[XRSR_QUEUE_MSG_TYPE_INVALID]
    xrsr_msg_keyword_detected,
    xrsr_msg_keyword_detect_error,
    xrsr_msg_session_begin,
+   xrsr_msg_session_config_in,
    xrsr_msg_session_terminate,
    xrsr_msg_session_capture_start,
    xrsr_msg_session_capture_stop,
@@ -1572,8 +1576,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
 
          detector_result_ptr   = &detector_result;
 
-         XLOGD_INFO("selected kwd channel <%u>", begin->detector_result.chan_selected);
-         XLOGD_INFO("kwd_gain <%f>", detector_result.kwd_gain);
+         XLOGD_INFO("selected kwd channel <%u> gain <%f> buf begin <%d> kwd begin <%d> end <%d>", begin->detector_result.chan_selected, detector_result.kwd_gain, detector_result.offset_buf_begin, detector_result.offset_kwd_begin, detector_result.offset_kwd_end);
          for(uint32_t chan = 0; chan < XRAUDIO_INPUT_MAX_CHANNEL_QTY; chan++) {
             xraudio_kwd_chan_result_t *chan_result = &begin->detector_result.channels[chan];
             if(chan_result->score >= 0.0) {
@@ -1600,7 +1603,6 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          #ifdef HTTP_ENABLED
          case XRSR_PROTOCOL_HTTP:
          case XRSR_PROTOCOL_HTTPS: {
-            int pipe_fd_read = -1;
             xrsr_state_http_t *http = &dst->conn_state.http;
             http->is_session_by_text = (transcription_in != NULL);
             if(!xrsr_http_is_disconnected(http)) {
@@ -1608,41 +1610,49 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                break;
             }
 
-            xrsr_session_configuration_http_t *session_config = &http->session_configuration.http;
-            memset(&http->session_configuration, 0, sizeof(http->session_configuration));
+            xrsr_session_config_out_t *session_config = &http->session_config_out;
+            memset(&http->session_config_out, 0, sizeof(http->session_config_out));
 
-            uuid_generate(session_config->uuid);
+            uuid_generate(http->uuid);
             char uuid_str[37] = {'\0'};
-            uuid_unparse_lower(session_config->uuid, uuid_str);
+            uuid_unparse_lower(http->uuid, uuid_str);
 
-            session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+            session_config->format            = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+            session_config->user_initiated    = begin->user_initiated;
+            session_config->cb_session_config = xrsr_callback_session_config_in_http;
 
             XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
             // Set the handlers based on source
-            http->handlers  = dst->handlers;
-            http->dst_index = dst_index;
+            http->handlers       = dst->handlers;
+            http->dst_index      = dst_index;
+            http->xraudio_format = begin->xraudio_format;
 
-            session_config->query_strs = NULL;
+            if(transcription_in == NULL) {
+               http->transcription_ptr = NULL;
+            } else {
+               errno_t safec_rc = -1;
+               safec_rc = strncpy_s(http->transcription_in, sizeof(http->transcription_in), transcription_in, sizeof(http->transcription_in) - 1);
+               ERR_CHK(safec_rc);
+               http->transcription_in[sizeof(http->transcription_in) - 1] = '\0';
+               http->transcription_ptr = &http->transcription_in[0];
+            }
+
 
             // Call session begin handler
-            if(http->handlers.session_begin != NULL) {
-               (*http->handlers.session_begin)(http->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_configuration, &begin->timestamp, transcription_in);
+            if(!begin->retry && http->handlers.session_begin != NULL) {
+               http->session_config_in.http.query_strs[0] = NULL;
+               (*http->handlers.session_begin)(http->handlers.data, http->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_config_out, &http->session_config_in, &begin->timestamp, http->transcription_ptr);
             }
 
-            if( (XRSR_SRC_MICROPHONE == g_xrsr.src) && (g_xrsr.power_mode == XRSR_POWER_MODE_LOW) ) {
-               g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
-               g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
-            }
+            // Defer until the application sets the session config via the callback.  This must be done asynchronously to avoid deadlock situations.
 
-            bool deferred = ((dst->stream_time_min > 0) && (transcription_in == NULL)) ? true : false;
+            if(begin->retry) { // connect again for retries
+               bool deferred = ((dst->stream_time_min > 0) && (transcription_in == NULL)) ? true : false;
 
-            if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
-               XLOGD_ERROR("xrsr_speech_stream_begin failed");
-            } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, begin->xraudio_format, state->timer_obj, deferred, session_config->query_strs, transcription_in)) {
-               XLOGD_ERROR("http connect failed");
-            } else {
-               http->audio_pipe_fd_read = pipe_fd_read;
+               if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, http->xraudio_format, state->timer_obj, deferred, http->session_config_in.http.query_strs, transcription_in)) {
+                  XLOGD_ERROR("http connect failed");
+               }
             }
             break;
          }
@@ -1653,55 +1663,40 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             xrsr_state_ws_t *ws = &dst->conn_state.ws;
             ws->is_session_by_text = (transcription_in != NULL);
             if(xrsr_ws_is_disconnected(ws)) {
-               xrsr_session_configuration_ws_t *session_config = &ws->session_configuration.ws;
+               xrsr_session_config_out_t *session_config = &ws->session_config_out;
 
                if(!begin->retry) { // Only generate new uuid if it's not a retry attempt
-                  uuid_generate(session_config->uuid);
+                  uuid_generate(ws->uuid);
                   ws->stream_time_min_rxd = false;
                }
                char uuid_str[37] = {'\0'};
-               uuid_unparse_lower(session_config->uuid, uuid_str);
+               uuid_unparse_lower(ws->uuid, uuid_str);
 
-               session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+               session_config->format            = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+               session_config->user_initiated    = begin->user_initiated;
+               session_config->cb_session_config = xrsr_callback_session_config_in_ws;
 
                XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
                // Set the handlers based on source
-               ws->handlers  = dst->handlers;
-               ws->dst_index = dst_index;
+               ws->handlers       = dst->handlers;
+               ws->dst_index      = dst_index;
+               ws->xraudio_format = begin->xraudio_format;
 
-               // Call session begin handler
-               session_config->user_initiated = begin->user_initiated;
-               session_config->query_strs     = NULL;
+               if(!begin->retry && ws->handlers.session_begin != NULL) { // Call session begin handler
+                  ws->session_config_in.ws.query_strs[0] = NULL;
 
-               const char *sat_token = NULL;
-               if(!begin->retry && ws->handlers.session_begin != NULL) {
-                  (*ws->handlers.session_begin)(ws->handlers.data, session_config->uuid, g_xrsr.src, dst_index, detector_result_ptr, &ws->session_configuration, &begin->timestamp, transcription_in);
-                  if(ws->session_configuration.ws.sat_token[0] != '\0') {
-                     sat_token = ws->session_configuration.ws.sat_token;
-                  }
-                  if( (XRSR_SRC_MICROPHONE == g_xrsr.src) && (g_xrsr.power_mode == XRSR_POWER_MODE_LOW) ) {
-                      g_xrsr.routes[g_xrsr.src].dsts[0].keyword_begin    = session_config->keyword_begin;
-                      g_xrsr.routes[g_xrsr.src].dsts[0].keyword_duration = session_config->keyword_duration;
-                   }
+                  (*ws->handlers.session_begin)(ws->handlers.data, ws->uuid, g_xrsr.src, dst_index, detector_result_ptr, &ws->session_config_out, &ws->session_config_in, &begin->timestamp, transcription_in);
                }
 
-               if(!begin->retry) { // start streaming audio to the pipe
-                  int pipe_fd_read = -1;
-                  if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, ws->dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
-                     XLOGD_ERROR("xrsr_speech_stream_begin failed");
-                     // perform clean up of the session
-                     xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
-                     break;
-                  } else {
-                     ws->audio_pipe_fd_read = pipe_fd_read;
+               // Defer audio stream and connect until the application sets the session config via the callback.  This must be done asynchronously to avoid deadlock situations.
+
+               if(begin->retry) { // connect again for retries
+                  bool deferred = ((dst->stream_time_min == 0) || transcription_in != NULL) ? false : !ws->stream_time_min_rxd;
+
+                  if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, ws->xraudio_format, begin->user_initiated, begin->retry, deferred, ws->session_config_in.ws.query_strs)) {
+                     XLOGD_ERROR("ws connect");
                   }
-               }
-
-               bool deferred = ((dst->stream_time_min == 0) || transcription_in != NULL) ? false : !ws->stream_time_min_rxd;
-
-               if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, begin->xraudio_format, begin->user_initiated, begin->retry, deferred, sat_token, session_config->query_strs)) {
-                  XLOGD_ERROR("ws connect");
                }
             } else if(xrsr_ws_is_established(ws)) {
                XLOGD_INFO("ws session continue");
@@ -1719,14 +1714,15 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
          case XRSR_PROTOCOL_SDT: {
             xrsr_state_sdt_t *sdt = &dst->conn_state.sdt;
             if(xrsr_sdt_is_disconnected(sdt)){
-               xrsr_session_configuration_sdt_t *session_config = &sdt->session_configuration.sdt;
-               uuid_generate(session_config->uuid);
+               xrsr_session_config_out_t *session_config = &sdt->session_config_out;
+               uuid_generate(sdt->uuid);
                sdt->stream_time_min_rxd = false;
                
                char uuid_str[37] = {'\0'};
-               uuid_unparse_lower(session_config->uuid, uuid_str);
+               uuid_unparse_lower(sdt->uuid, uuid_str);
 
-               session_config->format = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+               session_config->format            = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
+               session_config->cb_session_config = NULL;
 
                XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
@@ -1738,7 +1734,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                session_config->user_initiated = begin->user_initiated;
 
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(session_config->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(sdt->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                   // perform clean up of the session
                   xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -1768,6 +1764,243 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             return;
          }
       }
+   }
+}
+
+#ifdef HTTP_ENABLED
+void xrsr_callback_session_config_in_http(const uuid_t uuid, xrsr_session_config_in_t *config_in) {
+   xrsr_queue_msg_session_config_in_t msg;
+
+   msg.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN;
+   msg.protocol    = XRSR_PROTOCOL_HTTP;
+   uuid_copy(msg.uuid, uuid);
+
+   uint32_t i = 0;
+   const char **query_strs = config_in->http.query_strs;
+
+   while(*query_strs != NULL) {
+      if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+         XLOGD_WARN("maximum query string elements reached");
+         break;
+      }
+      msg.query_strs[i++] = *query_strs;
+      query_strs++;
+   }
+
+   msg.query_strs[i] = NULL;
+
+   msg.sat_token        = config_in->http.sat_token;
+   msg.user_agent       = config_in->http.user_agent;
+   msg.keyword_begin    = config_in->http.keyword_begin;
+   msg.keyword_duration = config_in->http.keyword_duration;
+   msg.app_config       = NULL;
+
+   xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+}
+#endif
+
+#ifdef WS_ENABLED
+void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_config_in_t *config_in) {
+   xrsr_queue_msg_session_config_in_t msg;
+
+   msg.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN;
+   msg.protocol    = XRSR_PROTOCOL_WS;
+   uuid_copy(msg.uuid, uuid);
+
+   uint32_t i = 0;
+   const char **query_strs = config_in->ws.query_strs;
+
+   while(*query_strs != NULL) {
+      if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+         XLOGD_WARN("maximum query string elements reached");
+         break;
+      }
+      msg.query_strs[i++] = *query_strs;
+      query_strs++;
+   }
+
+   msg.query_strs[i] = NULL;
+
+   msg.sat_token        = config_in->ws.sat_token;
+   msg.user_agent       = NULL;
+   msg.keyword_begin    = config_in->ws.keyword_begin;
+   msg.keyword_duration = config_in->ws.keyword_duration;
+   msg.app_config       = config_in->ws.app_config;
+
+   xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+}
+#endif
+
+void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
+   xrsr_queue_msg_session_config_in_t *config_in = (xrsr_queue_msg_session_config_in_t *)msg;
+
+   bool found_session = false;
+   for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
+      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[dst_index];
+
+      if((uint32_t)g_xrsr.src >= XRSR_SRC_INVALID) { // Source can be released by index 0
+         break;
+      }
+      if(dst->handler == NULL) {
+         continue;
+      }
+      xrsr_protocol_t prot = dst->url_parts.prot;
+
+      switch(prot) {
+         #ifdef HTTP_ENABLED
+         case XRSR_PROTOCOL_HTTP:
+         case XRSR_PROTOCOL_HTTPS: {
+            if(config_in->protocol != XRSR_PROTOCOL_HTTP) {
+               break;
+            }
+            xrsr_state_http_t *http = &dst->conn_state.http;
+            if(uuid_compare(http->uuid, config_in->uuid) == 0) {
+               found_session = true;
+
+               // Copy the session configuration input
+               xrsr_session_config_in_http_t *session_config_in_http = &http->session_config_in.http;
+
+               session_config_in_http->sat_token        = config_in->sat_token;
+               session_config_in_http->user_agent       = config_in->user_agent;
+               session_config_in_http->keyword_begin    = config_in->keyword_begin;
+               session_config_in_http->keyword_duration = config_in->keyword_duration;
+
+               XLOGD_DEBUG("HTTP config sat token <%p> user agent <%p> keyword begin <%u> duration <%u>", session_config_in_http->sat_token, session_config_in_http->user_agent, session_config_in_http->keyword_begin, session_config_in_http->keyword_duration);
+               uint32_t i = 0;
+               const char **query_strs = session_config_in_http->query_strs;
+
+               // Locate end of current query string list
+               while(*query_strs != NULL) {
+                  if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+                     XLOGD_WARN("maximum query string elements reached");
+                     break;
+                  }
+                  query_strs++;
+                  i++;
+               }
+
+               // Append query strings from app
+               const char **query_strs_app = config_in->query_strs;
+               while(*query_strs_app != NULL) {
+                  if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+                     XLOGD_WARN("maximum query string elements reached");
+                     break;
+                  }
+
+                  *query_strs = *query_strs_app;
+                  query_strs++;
+                  query_strs_app++;
+                  i++;
+               }
+
+               *query_strs = NULL;
+
+               // Call session config handler
+               if(http->handlers.session_config != NULL) {
+                  (*http->handlers.session_config)(http->handlers.data, http->uuid, &http->session_config_in);
+               }
+
+               bool deferred = ((dst->stream_time_min > 0) && !http->is_session_by_text) ? true : false;
+
+               int pipe_fd_read = -1;
+               if(!xrsr_speech_stream_begin(http->uuid, g_xrsr.src, dst_index, http->xraudio_format, http->session_config_out.user_initiated, &pipe_fd_read)) {
+                  XLOGD_ERROR("xrsr_speech_stream_begin failed");
+               } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, http->xraudio_format, state->timer_obj, deferred, session_config_in_http->query_strs, http->transcription_ptr)) {
+                  XLOGD_ERROR("http connect failed");
+               } else {
+                  http->audio_pipe_fd_read = pipe_fd_read;
+               }
+
+            }
+            break;
+         }
+         #endif
+         #ifdef WS_ENABLED
+         case XRSR_PROTOCOL_WS:
+         case XRSR_PROTOCOL_WSS: {
+            if(config_in->protocol != XRSR_PROTOCOL_WS) {
+               break;
+            }
+            xrsr_state_ws_t *ws = &dst->conn_state.ws;
+            if(uuid_compare(ws->uuid, config_in->uuid) == 0) {
+               found_session = true;
+
+               // Copy the session configuration input
+               xrsr_session_config_in_ws_t *session_config_in_ws = &ws->session_config_in.ws;
+
+               session_config_in_ws->sat_token        = config_in->sat_token;
+               session_config_in_ws->keyword_begin    = config_in->keyword_begin;
+               session_config_in_ws->keyword_duration = config_in->keyword_duration;
+               session_config_in_ws->app_config       = config_in->app_config;
+
+               dst->keyword_begin    = config_in->keyword_begin;
+               dst->keyword_duration = config_in->keyword_duration;
+
+               XLOGD_DEBUG("WS config sat token <%p> keyword begin <%u> duration <%u>", session_config_in_ws->sat_token, session_config_in_ws->keyword_begin, session_config_in_ws->keyword_duration);
+
+               uint32_t i = 0;
+               const char **query_strs = session_config_in_ws->query_strs;
+
+               // Locate end of current query string list
+               while(*query_strs != NULL) {
+                  if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+                     XLOGD_WARN("maximum query string elements reached");
+                     break;
+                  }
+                  query_strs++;
+                  i++;
+               }
+
+               // Append query strings from app
+               const char **query_strs_app = config_in->query_strs;
+               while(*query_strs_app != NULL) {
+                  if(i >= XRSR_QUERY_STRING_QTY_MAX) {
+                     XLOGD_WARN("maximum query string elements reached");
+                     break;
+                  }
+
+                  *query_strs = *query_strs_app;
+                  query_strs++;
+                  query_strs_app++;
+                  i++;
+               }
+
+               *query_strs = NULL;
+
+               // Call session config handler
+               if(ws->handlers.session_config != NULL) {
+                  (*ws->handlers.session_config)(ws->handlers.data, ws->uuid, &ws->session_config_in);
+               }
+
+               // start streaming audio to the pipe
+               int pipe_fd_read = -1;
+               if(!xrsr_speech_stream_begin(ws->uuid, g_xrsr.src, ws->dst_index, ws->xraudio_format, ws->session_config_out.user_initiated, &pipe_fd_read)) {
+                  XLOGD_ERROR("xrsr_speech_stream_begin failed");
+                  // perform clean up of the session
+                  xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
+                  break;
+               } else {
+                  ws->audio_pipe_fd_read = pipe_fd_read;
+               }
+
+               bool deferred = ((dst->stream_time_min == 0) || ws->is_session_by_text) ? false : !ws->stream_time_min_rxd;
+
+               if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, ws->xraudio_format, ws->session_config_out.user_initiated, false, deferred, ws->session_config_in.ws.query_strs)) {
+                  XLOGD_ERROR("ws connect");
+               }
+            }
+            break;
+         }
+         #endif
+         default: {
+         }
+      }
+   }
+
+   if(!found_session) {
+      char uuid_str[37] = {'\0'};
+      uuid_unparse_lower(config_in->uuid, uuid_str);
+      XLOGD_WARN("session not found uuid <%s>", uuid_str);
    }
 }
 

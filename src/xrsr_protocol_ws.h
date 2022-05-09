@@ -42,7 +42,9 @@ typedef struct {
    xrsr_protocol_t              prot;  // Used for identification
    xrsr_handlers_t              handlers;
    bool                         debug_enabled;
-   xrsr_session_configuration_t session_configuration;
+   uuid_t                       uuid;
+   xrsr_session_config_out_t    session_config_out;
+   xrsr_session_config_in_t     session_config_in;
    rdkx_timer_object_t          timer_obj;
    rdkx_timer_id_t              timer_id;
    uint32_t                     retry_cnt;
@@ -103,7 +105,7 @@ bool xrsr_ws_update_dst_params(xrsr_state_ws_t *ws, xrsr_dst_param_ptrs_t *param
 void xrsr_ws_host_name_set(xrsr_state_ws_t *ws, const char *host_name);
 void xrsr_ws_fd_set(xrsr_state_ws_t *ws, int *nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
 void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, fd_set *exceptfds);
-bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, bool user_initiated, bool is_retry, bool deferred, const char *sat_token, const char **query_strs);
+bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_t audio_src, xraudio_input_format_t xraudio_format, bool user_initiated, bool is_retry, bool deferred, const char **query_strs);
 bool xrsr_ws_conn_is_ready(xrsr_state_ws_t *ws);
 void xrsr_ws_terminate(xrsr_state_ws_t *ws);
 bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src);

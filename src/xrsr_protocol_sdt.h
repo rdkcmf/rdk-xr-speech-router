@@ -46,7 +46,8 @@ typedef struct {
 typedef struct {
    xrsr_protocol_t              prot;  // Used for identification
    xrsr_handlers_t              handlers;
-   xrsr_session_configuration_t session_configuration;
+   uuid_t                       uuid;
+   xrsr_session_config_out_t    session_config_out;
    rdkx_timer_object_t          timer_obj;
    rdkx_timer_id_t              timer_id;
    uint32_t                     retry_cnt;

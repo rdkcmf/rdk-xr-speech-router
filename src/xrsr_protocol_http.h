@@ -40,7 +40,14 @@ typedef struct {
    int                          audio_pipe_fd_read;
    xrsr_src_t                   audio_src;
    uint32_t                     dst_index;
-   xrsr_session_configuration_t session_configuration;
+   xraudio_input_format_t       xraudio_format;
+   uuid_t                       uuid;
+   xrsr_session_config_out_t    session_config_out;
+   xrsr_session_config_in_t     session_config_in;
+   const char *                 sat_token;
+   const char *                 user_agent;
+   char                         transcription_in[XRSR_SESSION_BY_TEXT_MAX_LENGTH];
+   char                        *transcription_ptr;
 
    /* HTTP Library Specific attributes */
    CURL                        *easy_handle;
