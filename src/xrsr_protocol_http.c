@@ -421,7 +421,7 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
     }
 
     XLOGD_INFO("user agent <%s>", http->session_config_in.http.user_agent);
-    XLOGD_INFO("url <%s>", url);
+    XLOGD_INFO("url <%s>", xrsr_mask_pii() ? "***" : url);
 
     // Set the URL / Port
 #ifdef URL_ENCODE

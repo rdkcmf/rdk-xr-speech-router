@@ -378,7 +378,7 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
       } while(*query_strs != NULL);
    }
 
-   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> family <%s> retry period <%u> ms", ws->local_host_name, url_parts->host, url_parts->port_str, ws->url, (deferred) ? "YES" : "NO", xrsr_address_family_str(url_parts->family), ws->timeout_session);
+   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> family <%s> retry period <%u> ms", ws->local_host_name, url_parts->host, url_parts->port_str, xrsr_mask_pii() ? "***" : ws->url, (deferred) ? "YES" : "NO", xrsr_address_family_str(url_parts->family), ws->timeout_session);
 
    nopoll_conn_connect_timeout(ws->obj_ctx, ws->timeout_connect * 1000);  // wait no more than N milliseconds
 

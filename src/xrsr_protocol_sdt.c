@@ -172,7 +172,7 @@ bool xrsr_sdt_connect(xrsr_state_sdt_t *sdt, xrsr_url_parts_t *url_parts, xrsr_s
 
    strncpy(sdt->url, url_parts->urle, sizeof(sdt->url)); // Copy main url
 
-   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> sat <%s> family <%s> retry period <%u> ms", sdt->local_host_name, url_parts->host, url_parts->port_str, sdt->url, (deferred) ? "YES" : "NO", (sat_token == NULL) ? "NO" : "YES", xrsr_address_family_str(url_parts->family), sdt->timeout_session);
+   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> sat <%s> family <%s> retry period <%u> ms", sdt->local_host_name, url_parts->host, url_parts->port_str, xrsr_mask_pii() ? "***" : sdt->url, (deferred) ? "YES" : "NO", (sat_token == NULL) ? "NO" : "YES", xrsr_address_family_str(url_parts->family), sdt->timeout_session);
 
 
    sdt->url_parts          = url_parts;

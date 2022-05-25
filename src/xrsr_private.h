@@ -305,5 +305,6 @@ xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format);
 
 void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
 void xrsr_keyword_detect_error(xrsr_src_t src);
+bool xrsr_mask_pii(void);
 
 #endif

@@ -497,7 +497,7 @@ void xrsr_version(xrsr_version_info_t *version_info, uint32_t *qty);
 /// @param[in] keyword_config Keyword configuration information or NULL if not specified.
 /// @param[in] capture_config Capture configuration information or NULL if not specified.
 /// @return The function returns true if successful or false otherwise.
-bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_keyword_config_t *keyword_config, const xrsr_capture_config_t *capture_config, xrsr_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_vsdk);
+bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_keyword_config_t *keyword_config, const xrsr_capture_config_t *capture_config, xrsr_power_mode_t power_mode, bool privacy_mode, bool mask_pii, const json_t *json_obj_vsdk);
 
 /// @brief Sets the speech router host name
 /// @details Replaces the host name.
@@ -528,6 +528,12 @@ bool xrsr_privacy_mode_set(bool enable);
 /// @param[in] type bool pointer
 /// @return The function returns true if successful or false otherwise
 bool xrsr_privacy_mode_get(bool *enabled);
+
+/// @brief Sets the speech router mask pii option
+/// @details Replaces the mask pii value.
+/// @param[in] enable Enables PII masking if true, otherwise disables.
+/// @return The function returns true if successful or false otherwise.
+bool xrsr_mask_pii_set(bool enable);
 
 /// @brief Sets the speech router routing table
 /// @details Replaces the speech routing information.

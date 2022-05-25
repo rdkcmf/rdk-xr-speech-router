@@ -117,6 +117,7 @@ typedef struct {
    bool                          opened;
    xrsr_power_mode_t             power_mode;
    bool                          privacy_mode;
+   bool                          mask_pii;
    xrsr_thread_info_t            threads[XRSR_THREAD_QTY];
    xrsr_route_int_t              routes[XRSR_SRC_INVALID];
    xrsr_xraudio_object_t         xrsr_xraudio_object;
@@ -249,7 +250,7 @@ void xrsr_version(xrsr_version_info_t *version_info, uint32_t *qty) {
    *qty -= qty_avail;
 }
 
-bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_keyword_config_t *keyword_config, const xrsr_capture_config_t *capture_config, xrsr_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_vsdk) {
+bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_keyword_config_t *keyword_config, const xrsr_capture_config_t *capture_config, xrsr_power_mode_t power_mode, bool privacy_mode, bool mask_pii, const json_t *json_obj_vsdk) {
    json_t *json_obj_xraudio = NULL;
    if(g_xrsr.opened) {
       XLOGD_ERROR("already open");
@@ -516,6 +517,7 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
 
    g_xrsr.power_mode   = power_mode;
    g_xrsr.privacy_mode = privacy_mode;
+   g_xrsr.mask_pii     = mask_pii;
    g_xrsr.opened       = true;
    return(true);
 }
@@ -800,7 +802,6 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
            params.host_name          = host_name;
            params.timer_obj          = state->timer_obj;
 
-
             if(!xrsr_sdt_init(&dst_int->conn_state.sdt, &params)) {
                XLOGD_ERROR("xrsr sdt init failed");
                return;
@@ -1021,6 +1022,25 @@ bool xrsr_privacy_mode_get(bool *enabled) {
    sem_destroy(&semaphore);
 
    return(result);
+}
+
+bool xrsr_mask_pii_set(bool enable) {
+   if(!g_xrsr.opened) {
+      XLOGD_ERROR("not opened");
+      return(false);
+   }
+   if(g_xrsr.mask_pii == enable) {
+      XLOGD_WARN("already %s", enable ? "enabled" : "disabled");
+      return(true);
+   }
+
+   g_xrsr.mask_pii = enable;
+
+   return(true);
+}
+
+bool xrsr_mask_pii(void) {
+   return(g_xrsr.mask_pii);
 }
 
 void *xrsr_thread_main(void *param) {
