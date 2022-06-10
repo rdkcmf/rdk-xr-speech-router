@@ -936,6 +936,10 @@ xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format) {
          ret = XRSR_AUDIO_FORMAT_PCM;
          break;
       }
+      case XRAUDIO_ENCODING_PCM_RAW: {
+         ret = XRSR_AUDIO_FORMAT_PCM_RAW;
+         break;
+      }
       case XRAUDIO_ENCODING_OPUS:
       case XRAUDIO_ENCODING_OPUS_XVP: {
          ret = XRSR_AUDIO_FORMAT_OPUS;

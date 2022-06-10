@@ -115,6 +115,7 @@ const char *xrsr_session_end_reason_str(xrsr_session_end_reason_t type) {
    switch(type) {
       case XRSR_SESSION_END_REASON_EOS:                   return("EOS");
       case XRSR_SESSION_END_REASON_EOT:                   return("EOT");
+      case XRSR_SESSION_END_REASON_DISCONNECT_REMOTE:     return("DISCONNECT_REMOTE");
       case XRSR_SESSION_END_REASON_TERMINATE:             return("TERMINATE");
       case XRSR_SESSION_END_REASON_ERROR_INTERNAL:        return("ERROR_INTERNAL");
       case XRSR_SESSION_END_REASON_ERROR_WS_SEND:         return("ERROR_WS_SEND");

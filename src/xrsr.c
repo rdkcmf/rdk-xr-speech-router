@@ -1320,14 +1320,14 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
    }
 }
 
-bool xrsr_session_request(xrsr_src_t src, const char* transcription_in) {
+bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char* transcription_in) {
    if(transcription_in == NULL && src != XRSR_SRC_MICROPHONE) {
       XLOGD_INFO("unsupported source <%s>", xrsr_src_str(src));
       return(false);
    }
    xraudio_input_format_t xraudio_format;
    xraudio_format.container   = XRAUDIO_CONTAINER_NONE;
-   xraudio_format.encoding    = XRAUDIO_ENCODING_PCM;
+   xraudio_format.encoding    = (format == XRSR_AUDIO_FORMAT_PCM_RAW) ? XRAUDIO_ENCODING_PCM_RAW : XRAUDIO_ENCODING_PCM;
    xraudio_format.sample_rate = XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE;
    xraudio_format.sample_size = XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE;
    xraudio_format.channel_qty = XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY;
@@ -1883,7 +1883,11 @@ void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_config_i
    msg.keyword_duration = config_in->ws.keyword_duration;
    msg.app_config       = config_in->ws.app_config;
 
-   xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+   if(0 != xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg))) {
+      if(config_in->ws.app_config != NULL) {
+         free(config_in->ws.app_config);
+      }
+   }
 }
 #endif
 
@@ -2057,6 +2061,9 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
       char uuid_str[37] = {'\0'};
       uuid_unparse_lower(config_in->uuid, uuid_str);
       XLOGD_WARN("session not found uuid <%s>", uuid_str);
+      if(config_in->app_config != NULL) {
+         free(config_in->app_config);
+      }
    }
 }
 
@@ -2458,7 +2465,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    switch(src) {
       case XRSR_SRC_RCU_PTT:    { source = XRAUDIO_DEVICE_INPUT_PTT;    break; }
       case XRSR_SRC_RCU_FF:     { source = XRAUDIO_DEVICE_INPUT_FF;     break; }
-      case XRSR_SRC_MICROPHONE: { source = XRAUDIO_DEVICE_INPUT_SINGLE; break; }
+      case XRSR_SRC_MICROPHONE: { source = (native_format.encoding == XRAUDIO_ENCODING_PCM_RAW) ? XRAUDIO_DEVICE_INPUT_TRI : XRAUDIO_DEVICE_INPUT_SINGLE; break; }
       default: {
          XLOGD_ERROR("invalid src <%s>", xrsr_src_str(src));
          g_xrsr.first_stream_req = true;
@@ -2471,7 +2478,8 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    xraudio_input_format_t xraudio_format = native_format;
 
    switch(xrsr_audio_format_get(dst->formats, xraudio_format)) {
-      case XRSR_AUDIO_FORMAT_PCM:    { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;   xraudio_format.sample_size = 2; break; }
+      case XRSR_AUDIO_FORMAT_PCM:    { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;     xraudio_format.sample_size = 2; break; }
+      case XRSR_AUDIO_FORMAT_PCM_RAW:{ xraudio_format.encoding = XRAUDIO_ENCODING_PCM_RAW; xraudio_format.sample_size = 4; xraudio_format.channel_qty = 3; break; }
       // This forwards all ADPCM / OPUS as it's native format. If we need to change this, then xrsr_audio_format_t will need to support the different versions.
       case XRSR_AUDIO_FORMAT_ADPCM:  { if(xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_XVP && xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_SKY) xraudio_format.encoding = XRAUDIO_ENCODING_ADPCM; break; }
       case XRSR_AUDIO_FORMAT_OPUS:   { if(xraudio_format.encoding != XRAUDIO_ENCODING_OPUS_XVP)  xraudio_format.encoding = XRAUDIO_ENCODING_OPUS;  break; }

@@ -415,9 +415,11 @@ bool xrsr_ws_connect_new(xrsr_state_ws_t *ws) {
    XLOGD_INFO("attempt <%u>", ws->retry_cnt);
 
    if(ws->prot == XRSR_PROTOCOL_WSS) {
-      ws->obj_conn = nopoll_conn_tls_new_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
+      const char *ptr_path = strchrnul(&ws->url[6], '/'); // skip over wss:// and locate next /
+      ws->obj_conn = nopoll_conn_tls_new_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ptr_path, NULL, origin);
    } else {
-      ws->obj_conn = nopoll_conn_new_opts_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ws->url, NULL, origin);
+      const char *ptr_path = strchrnul(&ws->url[5], '/'); // skip over ws:// and locate next /
+      ws->obj_conn = nopoll_conn_new_opts_auto(ws->obj_ctx, nopoll_opts, url_parts->host, url_parts->port_str, NULL, ptr_path, NULL, origin);
    }
    
    if(ws->obj_conn == NULL) {
@@ -1214,7 +1216,7 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
             }
             case SM_EVENT_WS_CLOSE: {
                ws->stream_end_reason  = XRSR_STREAM_END_REASON_DISCONNECT_REMOTE;
-               ws->session_end_reason = XRSR_SESSION_END_REASON_ERROR_WS_SEND;
+               ws->session_end_reason = XRSR_SESSION_END_REASON_DISCONNECT_REMOTE;
                break;
             }
             case SM_EVENT_TEXT_SESSION_SUCCESS: {

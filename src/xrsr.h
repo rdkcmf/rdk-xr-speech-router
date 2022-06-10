@@ -86,17 +86,18 @@ typedef enum {
 /// @brief XRSR session end reason types
 /// @details The session end reason enumeration indicates all the reasons why a voice session may end.
 typedef enum {
-   XRSR_SESSION_END_REASON_EOS                   = 0, ///< End of speech detected in the source audio
-   XRSR_SESSION_END_REASON_EOT                   = 1, ///< End of text-only session
-   XRSR_SESSION_END_REASON_TERMINATE             = 2, ///< Session was terminated before completion
-   XRSR_SESSION_END_REASON_ERROR_INTERNAL        = 3, ///< Session ended due to an internal error
-   XRSR_SESSION_END_REASON_ERROR_WS_SEND         = 4, ///< Session ended due to failure to send websocket data
-   XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN     = 5, ///< Session ended since no audio was received from the source
-   XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION  = 6, ///< Session ended due to an insufficient amount of audio samples received
-   XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE = 7, ///< Session ended due to failure to connect to the consumer endpoint
-   XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT = 8, ///< Session ended due to connection timeout to the consumer endpoint
-   XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT = 9, ///< Session ended due to a session timeout expiration
-   XRSR_SESSION_END_REASON_INVALID               = 10, ///< An invalid session end reason
+   XRSR_SESSION_END_REASON_EOS                   = 0,  ///< End of speech detected in the source audio
+   XRSR_SESSION_END_REASON_EOT                   = 1,  ///< End of text-only session
+   XRSR_SESSION_END_REASON_DISCONNECT_REMOTE     = 2,  ///< Server ended the session
+   XRSR_SESSION_END_REASON_TERMINATE             = 3,  ///< Session was terminated before completion
+   XRSR_SESSION_END_REASON_ERROR_INTERNAL        = 4,  ///< Session ended due to an internal error
+   XRSR_SESSION_END_REASON_ERROR_WS_SEND         = 5,  ///< Session ended due to failure to send websocket data
+   XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN     = 6,  ///< Session ended since no audio was received from the source
+   XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION  = 7,  ///< Session ended due to an insufficient amount of audio samples received
+   XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE = 8,  ///< Session ended due to failure to connect to the consumer endpoint
+   XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT = 9,  ///< Session ended due to connection timeout to the consumer endpoint
+   XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT = 10, ///< Session ended due to a session timeout expiration
+   XRSR_SESSION_END_REASON_INVALID               = 11, ///< An invalid session end reason
 } xrsr_session_end_reason_t;
 
 /// @brief XRSR internal return code types
@@ -151,9 +152,10 @@ typedef enum {
 typedef enum {
    XRSR_AUDIO_FORMAT_NONE    = 0,      ///< No audio format
    XRSR_AUDIO_FORMAT_PCM     = 1 << 0, ///< PCM format
-   XRSR_AUDIO_FORMAT_ADPCM   = 1 << 1, ///< ADPCM format
-   XRSR_AUDIO_FORMAT_OPUS    = 1 << 2, ///< OPUS format
-   XRSR_AUDIO_FORMAT_MAX     = 1 << 3  ///< The end of the audio format values (this must be the highest bit)
+   XRSR_AUDIO_FORMAT_PCM_RAW = 1 << 1, ///< Raw PCM format (unprocessed)
+   XRSR_AUDIO_FORMAT_ADPCM   = 1 << 2, ///< ADPCM format
+   XRSR_AUDIO_FORMAT_OPUS    = 1 << 3, ///< OPUS format
+   XRSR_AUDIO_FORMAT_MAX     = 1 << 4  ///< The end of the audio format values (this must be the highest bit)
 } xrsr_audio_format_t;
 
 
@@ -551,9 +553,10 @@ bool xrsr_route(const xrsr_route_t routes[]);
 /// @brief Requests a speech router session
 /// @details Requests to start a session manually by user pressing a button on the device or other means.
 /// @param[in] src Source type for the session
+/// @param[in] format Audio output format for the session
 /// @param[in] transcription_in transcription input for a text-only session (no audio data streamed)
 /// @return The function returns true if successful or false otherwise.
-bool xrsr_session_request(xrsr_src_t src, const char *transcription_in);
+bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char *transcription_in);
 
 /// @brief Sets keyword info for a speech router session
 /// @details Provides the keyword begin point and duration.
