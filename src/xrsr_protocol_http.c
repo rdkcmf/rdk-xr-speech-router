@@ -24,6 +24,14 @@
 #define XRSR_HTTP_CURL_FD_MAX (5)
 #define XRSR_HTTP_MSG_TIMEOUT         (10000) // in milliseconds
 
+#define CURL_EASY_SETOPT(curl, CURLoption, option) \
+   do { \
+      CURLcode res = curl_easy_setopt(curl, CURLoption, option); \
+      if (res != CURLE_OK) { \
+         XLOGD_ERROR("curl_easy_setopt() failed with reason <%s>", curl_easy_strerror(res)); \
+      } \
+   } while (0);
+
 // Static Global Variables
 typedef struct {
     unsigned int        ref;
@@ -89,15 +97,15 @@ size_t _xrsr_http_write_function(char *ptr, size_t size, size_t nmemb, void *use
     size_t             len  = 0;
     if(NULL == http) {
         XLOGD_ERROR("NULL xrsr_state_http_t");
-    }
-
-    // Get current response length
-    len = strnlen(http->write_buffer, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX);
-    if(len + (size * nmemb) > XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX) {
-        XLOGD_ERROR("response buffer overflow");
-        strncpy(&http->write_buffer[len], ptr, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX - len);
-    } else { // We have enough room
-        strncpy(&http->write_buffer[len], ptr, size * nmemb);
+    } else {
+        // Get current response length
+        len = strnlen(http->write_buffer, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX);
+        if(len + (size * nmemb) > XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX) {
+            XLOGD_ERROR("response buffer overflow");
+            strncpy(&http->write_buffer[len], ptr, XRSR_PROTOCOL_HTTP_BUFFER_SIZE_MAX - len);
+        } else { // We have enough room
+            strncpy(&http->write_buffer[len], ptr, size * nmemb);
+        }
     }
     return(size * nmemb);
 }
@@ -107,27 +115,28 @@ size_t _xrsr_http_read_function(char *ptr, size_t size, size_t nmemb, void *user
     xrsr_state_http_t *http = (xrsr_state_http_t *)userdata;
     if(NULL == http) {
         XLOGD_ERROR("NULL xrsr_state_http_t");
-    }
-    if(http->audio_pipe_fd_read >= 0) {
-        int rc = read(http->audio_pipe_fd_read, ptr, size * nmemb);
-        if(rc < 0) {
-            int errsv = errno;
-            if(errsv == EAGAIN || errsv == EWOULDBLOCK) {
-               XLOGD_INFO("read would block");
-            } else {
-               XLOGD_ERROR("pipe read error <%s>", strerror(errsv));
+    } else {
+        if(http->audio_pipe_fd_read >= 0) {
+            int rc = read(http->audio_pipe_fd_read, ptr, size * nmemb);
+            if(rc < 0) {
+                int errsv = errno;
+                if(errsv == EAGAIN || errsv == EWOULDBLOCK) {
+                   XLOGD_INFO("read would block");
+                } else {
+                   XLOGD_ERROR("pipe read error <%s>", strerror(errsv));
+                }
+                close(http->audio_pipe_fd_read);
+                http->audio_pipe_fd_read = -1;
+                rc = 0;
+                xrsr_http_event(http, SM_EVENT_PIPE_EOS, false);
+            } else if(rc == 0) { // EOF
+                XLOGD_INFO("pipe read EOF");
+                close(http->audio_pipe_fd_read);
+                http->audio_pipe_fd_read = -1;
+                xrsr_http_event(http, SM_EVENT_PIPE_EOS, false);
             }
-            close(http->audio_pipe_fd_read);
-            http->audio_pipe_fd_read = -1;
-            rc = 0;
-            xrsr_http_event(http, SM_EVENT_PIPE_EOS, false);
-        } else if(rc == 0) { // EOF
-            XLOGD_INFO("pipe read EOF");
-            close(http->audio_pipe_fd_read);
-            http->audio_pipe_fd_read = -1;
-            xrsr_http_event(http, SM_EVENT_PIPE_EOS, false);
+            bytes = rc;
         }
-        bytes = rc;
     }
     XLOGD_INFO("sent %zu bytes", bytes);
     return(bytes);
@@ -353,7 +362,7 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
         char transcription_payload[XRSR_SESSION_BY_TEXT_MAX_LENGTH];
         snprintf(transcription_payload, sizeof(transcription_payload), "%s", transcription_in ? transcription_in : "");
         transcription_payload[sizeof(transcription_payload)-1] = '\0';  //A bit redundant since snprintf does this, but let's be certain because CURLOPT_COPYPOSTFIELDS requires it
-        curl_easy_setopt(http->easy_handle, CURLOPT_COPYPOSTFIELDS, transcription_payload);
+        CURL_EASY_SETOPT(http->easy_handle, CURLOPT_COPYPOSTFIELDS, transcription_payload);
     } else {
         http->chunk = curl_slist_append(http->chunk, "Transfer-Encoding: chunked");
         http->chunk = curl_slist_append(http->chunk, "Content-Type:application/octet-stream");
@@ -368,24 +377,24 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
     // Set CURL easy handle options
     if(http->debug) {
         // Debug set to true, set VERBOSE curl opt
-        curl_easy_setopt(http->easy_handle, CURLOPT_VERBOSE, 1L);
+        CURL_EASY_SETOPT(http->easy_handle, CURLOPT_VERBOSE, 1L);
     }
-    curl_easy_setopt(http->easy_handle, CURLOPT_WRITEFUNCTION, _xrsr_http_write_function);
-    curl_easy_setopt(http->easy_handle, CURLOPT_WRITEDATA, (void *)http);
-    curl_easy_setopt(http->easy_handle, CURLOPT_READFUNCTION, _xrsr_http_read_function);
-    curl_easy_setopt(http->easy_handle, CURLOPT_READDATA, (void *)http);
-    curl_easy_setopt(http->easy_handle, CURLOPT_DEBUGFUNCTION, _xrsr_http_debug_function);
-    curl_easy_setopt(http->easy_handle, CURLOPT_XFERINFODATA, (void *)http);
-    curl_easy_setopt(http->easy_handle, CURLOPT_NOPROGRESS, 1L);
-    curl_easy_setopt(http->easy_handle, CURLOPT_CONNECTTIMEOUT, 5L);
-    curl_easy_setopt(http->easy_handle, CURLOPT_PRIVATE, (void *)http);
-    curl_easy_setopt(http->easy_handle, CURLOPT_HTTPHEADER, http->chunk);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_WRITEFUNCTION, _xrsr_http_write_function);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_WRITEDATA, (void *)http);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_READFUNCTION, _xrsr_http_read_function);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_READDATA, (void *)http);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_DEBUGFUNCTION, _xrsr_http_debug_function);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_XFERINFODATA, (void *)http);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_NOPROGRESS, 1L);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_CONNECTTIMEOUT, 5L);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_PRIVATE, (void *)http);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_HTTPHEADER, http->chunk);
     if(http->session_config_in.http.user_agent[0] != '\0') {
-       curl_easy_setopt(http->easy_handle, CURLOPT_USERAGENT, http->session_config_in.http.user_agent);
+       CURL_EASY_SETOPT(http->easy_handle, CURLOPT_USERAGENT, http->session_config_in.http.user_agent);
     }
-    curl_easy_setopt(http->easy_handle, CURLOPT_FORBID_REUSE, 1);
-    curl_easy_setopt(http->easy_handle, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(http->easy_handle, CURLOPT_NOSIGNAL, 1L);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_FORBID_REUSE, 1);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_FOLLOWLOCATION, 1L);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_NOSIGNAL, 1L);
 
     // Check protocol
     if(XRSR_PROTOCOL_HTTP != url_parts->prot && XRSR_PROTOCOL_HTTPS != url_parts->prot) {
@@ -401,7 +410,9 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
         XLOGD_ERROR("url not set");
         return(false);
     }
-    strncpy(url, url_parts->urle, sizeof(url)); // Copy main url
+    errno_t safe_rc = -1;
+    safe_rc = strncpy_s(url, sizeof(url), url_parts->urle, XRSR_WS_URL_SIZE_MAX-1); // Copy main url
+    ERR_CHK(safe_rc);
 
     if(query_strs != NULL && *query_strs != NULL) { // add attribute-value pairs to the query string
        bool delimit = url_parts->has_param;
@@ -430,12 +441,12 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
         XLOGD_ERROR("failed to encode url");
         return(false);
     }
-    curl_easy_setopt(http->easy_handle, CURLOPT_URL, url_encoded);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_URL, url_encoded);
     curl_free(url_encoded);
 #else
-    curl_easy_setopt(http->easy_handle, CURLOPT_URL, url); // TODO Concat path to the url MAYBE?
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_URL, url); // TODO Concat path to the url MAYBE?
 #endif
-    curl_easy_setopt(http->easy_handle, CURLOPT_POST, 1L);
+    CURL_EASY_SETOPT(http->easy_handle, CURLOPT_POST, 1L);
 
     if(false == delay) {
         xrsr_http_event(http, SM_EVENT_SESSION_BEGIN, false);
@@ -578,7 +589,11 @@ void xrsr_http_handle_fds(xrsr_state_http_t *http, int size, fd_set *readfds, fd
                     curl_easy_getinfo(temp->easy_handle, CURLINFO_HTTP_CODE, &temp->session_stats.ret_code_protocol);
                     temp->session_stats.ret_code_library = status->data.result;
                     curl_easy_getinfo(temp->easy_handle, CURLINFO_PRIMARY_IP, &primary_ip);
-                    if(primary_ip) strncpy(temp->session_stats.server_ip, primary_ip, sizeof(temp->session_stats.server_ip));
+                    if(primary_ip) {
+                       errno_t safe_rc = -1;
+                       strncpy_s(temp->session_stats.server_ip, sizeof(temp->session_stats.server_ip), primary_ip, XRSR_SESSION_IP_LEN_MAX-1);
+                       ERR_CHK(safe_rc);
+                    }
                     curl_easy_getinfo(temp->easy_handle, CURLINFO_CONNECT_TIME, &temp->session_stats.time_connect);
                     curl_easy_getinfo(temp->easy_handle, CURLINFO_NAMELOOKUP_TIME, &temp->session_stats.time_dns);
 

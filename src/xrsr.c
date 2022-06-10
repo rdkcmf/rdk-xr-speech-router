@@ -2054,8 +2054,8 @@ void xrsr_session_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, u
 
    // check state of each dst to determine if session if overall session is completed
    bool session_in_progress = false;
-   for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
-      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[dst_index];
+   for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
+      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[index];
       if(dst->handler == NULL) {
          continue;
       }

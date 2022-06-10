@@ -70,10 +70,12 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
    }
    if((uint32_t)keyword_config >= XRAUDIO_KEYWORD_CONFIG_INVALID) {
       XLOGD_ERROR("invalid keyword config <%s>", xraudio_keyword_config_str(keyword_config));
+      free(obj);
       return(NULL);
    }
    if((uint32_t)power_mode >= XRAUDIO_POWER_MODE_INVALID) {
       XLOGD_ERROR("invalid power mode <%s>", xraudio_power_mode_str(power_mode));
+      free(obj);
       return(NULL);
    }
 
@@ -558,11 +560,11 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
 
    uint64_t frame_byte_qty;
    if(format_decoded) {
-      frame_byte_qty = (format_decoded->sample_rate * format_decoded->sample_size * format_decoded->channel_qty) * (frame_duration) / (1000000);
+      frame_byte_qty = (format_decoded->sample_rate * format_decoded->sample_size * format_decoded->channel_qty) * ((uint64_t) frame_duration) / (1000000);
    } else if(XRAUDIO_DEVICE_INPUT_EXTERNAL_GET(source)) {
       frame_byte_qty = 95;
    } else {
-      frame_byte_qty = (XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE * XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE * XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY) * (frame_duration) / (1000000);
+      frame_byte_qty = (XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE * XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE * XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY) * ((uint64_t) frame_duration) / (1000000);
    }
    uint32_t frame_group_quantity = FRAME_GROUP_SIZE_MAX / frame_byte_qty;
    if(frame_group_quantity > XRAUDIO_INPUT_MAX_FRAME_GROUP_QTY) {
