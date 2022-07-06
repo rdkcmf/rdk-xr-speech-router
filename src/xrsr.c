@@ -260,10 +260,6 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
       XLOGD_ERROR("invalid parameter");
       return(false);
    }
-   if(keyword_config != NULL && keyword_config->sensitivity >= XRAUDIO_KEYWORD_CONFIG_INVALID) {
-      XLOGD_ERROR("invalid keyword config - sensitivity <%u>", keyword_config->sensitivity);
-      return(false);
-   }
    if((uint32_t)power_mode >= XRSR_POWER_MODE_INVALID) {
       XLOGD_ERROR("invalid power mode <%s>", xrsr_power_mode_str(power_mode));
       return(false);
@@ -291,7 +287,7 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
    } while(1);
 
    // Create xraudio object
-   xraudio_keyword_config_t config = (keyword_config == NULL) ? XRAUDIO_KEYWORD_CONFIG_5 : (xraudio_keyword_config_t)keyword_config->sensitivity;
+   xraudio_keyword_sensitivity_t sensitivity = (keyword_config == NULL) ? XRAUDIO_INPUT_DEFAULT_KEYWORD_SENSITIVITY : (xraudio_keyword_sensitivity_t)keyword_config->sensitivity;
 
    g_xrsr.src                 = XRSR_SRC_INVALID;
    g_xrsr.first_stream_req    = true;
@@ -468,7 +464,7 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
          return(false);
    }
 
-   g_xrsr.xrsr_xraudio_object = xrsr_xraudio_create(XRSR_KEYWORD_PHRASE, config, xraudio_power_mode, privacy_mode, json_obj_xraudio);
+   g_xrsr.xrsr_xraudio_object = xrsr_xraudio_create(XRSR_KEYWORD_PHRASE, sensitivity, xraudio_power_mode, privacy_mode, json_obj_xraudio);
 
    if(capture_config != NULL) {
       if(capture_config->delete_files) {
@@ -906,10 +902,6 @@ bool xrsr_keyword_config_set(const xrsr_keyword_config_t *keyword_config) {
    }
    if(keyword_config == NULL) {
       XLOGD_ERROR("invalid parameter");
-      return(false);
-   }
-   if(keyword_config->sensitivity >= XRAUDIO_KEYWORD_CONFIG_INVALID) {
-      XLOGD_ERROR("invalid keyword config - sensitivity <%u>", keyword_config->sensitivity);
       return(false);
    }
 
@@ -1387,7 +1379,7 @@ void xrsr_msg_keyword_update(const xrsr_thread_params_t *params, xrsr_thread_sta
    if(keyword_update->keyword_config == NULL) {
       XLOGD_ERROR("NULL keyword config");
    } else {
-      xrsr_xraudio_keyword_detect_params(g_xrsr.xrsr_xraudio_object, XRSR_KEYWORD_PHRASE, (xraudio_keyword_config_t)keyword_update->keyword_config->sensitivity);
+      xrsr_xraudio_keyword_detect_params(g_xrsr.xrsr_xraudio_object, XRSR_KEYWORD_PHRASE, (xraudio_keyword_sensitivity_t)keyword_update->keyword_config->sensitivity);
    }
    if(keyword_update->semaphore != NULL) {
       sem_post(keyword_update->semaphore);

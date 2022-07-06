@@ -38,7 +38,7 @@ typedef struct {
    xraudio_devices_output_t      device_output;
    bool                          detect_active;
    xraudio_keyword_phrase_t      keyword_phrase;
-   xraudio_keyword_config_t      keyword_config;
+   xraudio_keyword_sensitivity_t keyword_sensitivity;
    bool                          audio_stats_rxd;
    xrsr_audio_stats_t            audio_stats;
    xraudio_devices_input_t       available_inputs[XRAUDIO_INPUT_MAX_DEVICE_QTY];
@@ -61,16 +61,11 @@ static void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj);
 static xraudio_devices_input_t g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
 static xraudio_devices_input_t g_local_mic_low_power  = XRAUDIO_DEVICE_INPUT_NONE;
 
-xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_config_t keyword_config, xraudio_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_xraudio) {
+xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_sensitivity_t keyword_sensitivity, xraudio_power_mode_t power_mode, bool privacy_mode, const json_t *json_obj_xraudio) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)malloc(sizeof(xrsr_xraudio_obj_t));
 
    if(obj == NULL) {
       XLOGD_ERROR("Out of memory.");
-      return(NULL);
-   }
-   if((uint32_t)keyword_config >= XRAUDIO_KEYWORD_CONFIG_INVALID) {
-      XLOGD_ERROR("invalid keyword config <%s>", xraudio_keyword_config_str(keyword_config));
-      free(obj);
       return(NULL);
    }
    if((uint32_t)power_mode >= XRAUDIO_POWER_MODE_INVALID) {
@@ -87,7 +82,7 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
    obj->device_output        = XRAUDIO_DEVICE_OUTPUT_NONE;
    obj->detect_active        = true;
    obj->keyword_phrase       = keyword_phrase;
-   obj->keyword_config       = keyword_config;
+   obj->keyword_sensitivity  = keyword_sensitivity;
    obj->audio_stats_rxd      = false;
    xrsr_audio_stats_clear(obj);
    obj->xraudio_obj          = xraudio_object_create(json_obj_xraudio);
@@ -385,7 +380,7 @@ void xrsr_xraudio_device_close(xrsr_xraudio_object_t object) {
    }
 }
 
-void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *object, xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_config_t keyword_config) {
+void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *object, xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_sensitivity_t keyword_sensitivity) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
@@ -393,15 +388,15 @@ void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *object, xraudio_k
       return;
    }
 
-   XLOGD_INFO("phrase <%s> config <%s>", xraudio_keyword_phrase_str(keyword_phrase), xraudio_keyword_config_str(keyword_config));
+   XLOGD_INFO("phrase <%s> sensitivity <%f>", xraudio_keyword_phrase_str(keyword_phrase), keyword_sensitivity);
 
-   bool changed = (obj->keyword_phrase != keyword_phrase) || (obj->keyword_config != keyword_config);
+   bool changed = (obj->keyword_phrase != keyword_phrase) || (obj->keyword_sensitivity != keyword_sensitivity);
 
-   obj->keyword_phrase = keyword_phrase;
-   obj->keyword_config = keyword_config;
+   obj->keyword_phrase        = keyword_phrase;
+   obj->keyword_sensitivity   = keyword_sensitivity;
 
    if(changed && (obj->xraudio_state == XRSR_XRAUDIO_STATE_DETECTING)) {
-      xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_config);
+      xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_sensitivity);
       if(XRAUDIO_RESULT_OK != result) {
          XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
       }
@@ -419,9 +414,9 @@ void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object) {
 }
 
 void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
-   XLOGD_INFO("phrase <%s> config <%s>", xraudio_keyword_phrase_str(obj->keyword_phrase), xraudio_keyword_config_str(obj->keyword_config));
+   XLOGD_INFO("phrase <%s> sensitivity <%f>", xraudio_keyword_phrase_str(obj->keyword_phrase), obj->keyword_sensitivity);
 
-   xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_config);
+   xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_sensitivity);
    if(XRAUDIO_RESULT_OK != result) {
       XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
    }

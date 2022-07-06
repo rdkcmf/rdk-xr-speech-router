@@ -459,7 +459,7 @@ typedef struct {
 /// @brief XRSR keyword configuration structure
 /// @details The keyword configuration data structure indicates detailed information for the keyword detector.
 typedef struct {
-   uint32_t sensitivity; ///< Sensitivity level of the keyword detector
+   float sensitivity; ///< Sensitivity level of the keyword detector
 } xrsr_keyword_config_t;
 
 /// @brief XRSR capture config structure
