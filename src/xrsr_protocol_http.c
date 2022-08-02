@@ -368,7 +368,7 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
         http->chunk = curl_slist_append(http->chunk, "Content-Type:application/octet-stream");
     }
 
-    if(http->session_config_in.http.sat_token[0] != '\0') {
+    if(http->session_config_in.http.sat_token != NULL && http->session_config_in.http.sat_token[0] != '\0') {
        snprintf(sat_token_str, sizeof(sat_token_str), "Authorization: Bearer %s", http->session_config_in.http.sat_token);
        http->chunk = curl_slist_append(http->chunk, sat_token_str);
     }
@@ -389,7 +389,7 @@ bool xrsr_http_connect(xrsr_state_http_t *http, xrsr_url_parts_t *url_parts, xrs
     CURL_EASY_SETOPT(http->easy_handle, CURLOPT_CONNECTTIMEOUT, 5L);
     CURL_EASY_SETOPT(http->easy_handle, CURLOPT_PRIVATE, (void *)http);
     CURL_EASY_SETOPT(http->easy_handle, CURLOPT_HTTPHEADER, http->chunk);
-    if(http->session_config_in.http.user_agent[0] != '\0') {
+    if(http->session_config_in.http.user_agent != NULL && http->session_config_in.http.user_agent[0] != '\0') {
        CURL_EASY_SETOPT(http->easy_handle, CURLOPT_USERAGENT, http->session_config_in.http.user_agent);
     }
     CURL_EASY_SETOPT(http->easy_handle, CURLOPT_FORBID_REUSE, 1);
