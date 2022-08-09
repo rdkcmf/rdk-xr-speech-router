@@ -43,13 +43,14 @@ static bool xrsr_ws_get_msg_out(xrsr_state_ws_t *ws, char **msg, uint32_t *lengt
 static void xrsr_ws_clear_msg_out(xrsr_state_ws_t *ws);
 
 // This function kicks off the session
-void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in) {
+void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency) {
    xrsr_queue_msg_session_begin_t msg;
    msg.header.type     = XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN;
    msg.src             = src;
    msg.retry           = retry;
    msg.user_initiated  = user_initiated;
    msg.xraudio_format  = xraudio_format;
+   msg.low_latency     = low_latency;
    if(detector_result == NULL) {
       msg.has_result = false;
       memset(&msg.detector_result, 0, sizeof(msg.detector_result));
@@ -391,6 +392,7 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
    ws->audio_txd_bytes    = 0;
    ws->connect_wait_time  = ws->timeout_connect;
    ws->on_close           = false;
+   ws->close_status       = -1;
    memset(&ws->stats, 0, sizeof(ws->stats));
    memset(&ws->audio_stats, 0, sizeof(ws->audio_stats));
 
@@ -493,7 +495,7 @@ bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src) {
 
    // Continue streaming audio to the websocket
    int pipe_fd_read = -1;
-   if(!xrsr_speech_stream_begin(ws->uuid, ws->audio_src, ws->dst_index, ws->xraudio_format, ws->user_initiated, &pipe_fd_read)) {
+   if(!xrsr_speech_stream_begin(ws->uuid, ws->audio_src, ws->dst_index, ws->xraudio_format, ws->user_initiated, ws->low_latency, &pipe_fd_read)) {
       XLOGD_ERROR("xrsr_speech_stream_begin failed");
       // perform clean up of the session
       xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -631,6 +633,8 @@ void xrsr_ws_on_close(noPollCtx *ctx, noPollConn *conn, noPollPtr user_data) {
       nopoll_msg_unref(ws->pending_msg);
       ws->pending_msg = NULL;
    }
+   ws->close_status = nopoll_conn_get_close_status(conn);
+
    xrsr_ws_event(ws, SM_EVENT_WS_CLOSE, false);
 }
 
@@ -646,7 +650,7 @@ void xrsr_ws_speech_stream_end(xrsr_state_ws_t *ws, xrsr_stream_end_reason_t rea
 }
 
 void xrsr_ws_speech_session_end(xrsr_state_ws_t *ws, xrsr_session_end_reason_t reason) {
-   XLOGD_INFO("fd <%d> reason <%s>", ws->audio_pipe_fd_read, xrsr_session_end_reason_str(reason));
+   XLOGD_INFO("fd <%d> reason <%s> close code <%d>", ws->audio_pipe_fd_read, xrsr_session_end_reason_str(reason), ws->close_status);
 
    ws->stats.reason = reason;
 
@@ -1216,7 +1220,7 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
             }
             case SM_EVENT_WS_CLOSE: {
                ws->stream_end_reason  = XRSR_STREAM_END_REASON_DISCONNECT_REMOTE;
-               ws->session_end_reason = XRSR_SESSION_END_REASON_DISCONNECT_REMOTE;
+               ws->session_end_reason = (ws->close_status != 1000) ? XRSR_SESSION_END_REASON_ERROR_DISCONNECT_REMOTE : XRSR_SESSION_END_REASON_DISCONNECT_REMOTE;
                break;
             }
             case SM_EVENT_TEXT_SESSION_SUCCESS: {

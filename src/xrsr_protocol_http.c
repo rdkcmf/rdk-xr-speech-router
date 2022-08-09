@@ -225,7 +225,7 @@ int _xrsr_http_timer_function(CURLM *multi, long timeout_ms, void *userp) {
 
 // END -- CURL callback functions
 
-void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in) {
+void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency) {
     // This function kicks off the session
     xrsr_queue_msg_session_begin_t msg;
     msg.header.type     = XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN;
@@ -233,6 +233,7 @@ void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated,
     msg.retry           = retry;
     msg.user_initiated  = user_initiated;
     msg.xraudio_format  = xraudio_format;
+    msg.low_latency     = low_latency;
     if(detector_result == NULL) {
        msg.has_result = false;
        memset(&msg.detector_result, 0, sizeof(msg.detector_result));

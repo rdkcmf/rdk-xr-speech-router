@@ -484,7 +484,7 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
    XLOGD_INFO("Keyword detected for source <%s>", xrsr_src_str(src));
 
    // Call the appropriate handler based on the source
-   xrsr_session_begin(src, user_initiated, msg->xraudio_format, detector_result, NULL);
+   xrsr_session_begin(src, user_initiated, msg->xraudio_format, detector_result, NULL, false);
 }
 
 void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_devices_input_t source) {
@@ -539,7 +539,7 @@ void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_dev
    }
 }
 
-bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_id, xraudio_devices_input_t source, bool user_initiated, xraudio_input_format_t *format_decoded, xraudio_dst_pipe_t dsts[], uint16_t stream_time_min, uint32_t keyword_begin, uint32_t keyword_duration, uint32_t frame_duration) {
+bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_id, xraudio_devices_input_t source, bool user_initiated, xraudio_input_format_t *format_decoded, xraudio_dst_pipe_t dsts[], uint16_t stream_time_min, uint32_t keyword_begin, uint32_t keyword_duration, uint32_t frame_duration, bool low_latency) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
@@ -551,8 +551,6 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
       return(false);
    }
 
-   XLOGD_INFO("stream id <%s> source <%s> user <%s> pipe <%d, %d>", stream_id, xraudio_devices_input_str(source), user_initiated ? "YES" : "NO", dsts[0].pipe, dsts[1].pipe);
-
    uint64_t frame_byte_qty;
    if(format_decoded) {
       frame_byte_qty = (format_decoded->sample_rate * format_decoded->sample_size * format_decoded->channel_qty) * ((uint64_t) frame_duration) / (1000000);
@@ -561,14 +559,14 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
    } else {
       frame_byte_qty = (XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE * XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE * XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY) * ((uint64_t) frame_duration) / (1000000);
    }
-   uint32_t frame_group_quantity = FRAME_GROUP_SIZE_MAX / frame_byte_qty;
+   uint32_t frame_group_quantity = (low_latency) ? 1 : FRAME_GROUP_SIZE_MAX / frame_byte_qty;
    if(frame_group_quantity > XRAUDIO_INPUT_MAX_FRAME_GROUP_QTY) {
       frame_group_quantity = XRAUDIO_INPUT_MAX_FRAME_GROUP_QTY;
    } else if(frame_group_quantity < XRAUDIO_INPUT_MIN_FRAME_GROUP_QTY) {
       frame_group_quantity = XRAUDIO_INPUT_MIN_FRAME_GROUP_QTY;
    }
 
-   XLOGD_INFO("frame size <%llu> group qty <%u> duration <%u> usecs", frame_byte_qty, frame_group_quantity, frame_duration);
+   XLOGD_INFO("stream id <%s> source <%s> user <%s> pipe <%d, %d> frame size <%llu> group qty <%u> duration <%u> usecs", stream_id, xraudio_devices_input_str(source), user_initiated ? "YES" : "NO", dsts[0].pipe, dsts[1].pipe, frame_byte_qty, frame_group_quantity, frame_duration);
 
    xraudio_result_t result = xraudio_stream_frame_group_quantity_set(obj->xraudio_obj, frame_group_quantity);
    if(result != XRAUDIO_RESULT_OK) {
@@ -693,7 +691,7 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
 }
 
-bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format, const char* transcription_in) {
+bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format, const char* transcription_in, bool low_latency) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
@@ -710,7 +708,7 @@ bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, 
       obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
    }
 
-   xrsr_session_begin(src, true, xraudio_format, NULL, transcription_in);
+   xrsr_session_begin(src, true, xraudio_format, NULL, transcription_in, low_latency);
 
    return(true);
 }
@@ -933,7 +931,15 @@ xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format) {
    xrsr_audio_format_t ret = XRSR_AUDIO_FORMAT_NONE;
    switch(format.encoding) {
       case XRAUDIO_ENCODING_PCM: {
-         ret = XRSR_AUDIO_FORMAT_PCM;
+         if(format.sample_size > 2) {
+            if(format.channel_qty > 1) {
+               ret = XRSR_AUDIO_FORMAT_PCM_32_BIT_MULTI;
+            } else {
+               ret = XRSR_AUDIO_FORMAT_PCM_32_BIT;
+            }
+         } else {
+            ret = XRSR_AUDIO_FORMAT_PCM;
+         }
          break;
       }
       case XRAUDIO_ENCODING_PCM_RAW: {

@@ -35,13 +35,14 @@ static bool xrsr_sdt_queue_msg_out(xrsr_state_sdt_t *sdt, const char *msg, uint3
 static void xrsr_sdt_clear_msg_out(xrsr_state_sdt_t *sdt);
 
 // This function kicks off the session
-void xrsr_protocol_handler_sdt(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in) {
+void xrsr_protocol_handler_sdt(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency) {
    xrsr_queue_msg_session_begin_t msg;
    msg.header.type     = XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN;
    msg.src             = src;
    msg.retry           = retry;
    msg.user_initiated  = user_initiated;
    msg.xraudio_format  = xraudio_format;
+   msg.low_latency     = low_latency;
    if(detector_result == NULL) {
       msg.has_result = false;
       memset(&msg.detector_result, 0, sizeof(msg.detector_result));
@@ -239,7 +240,7 @@ bool xrsr_sdt_audio_stream(xrsr_state_sdt_t *sdt, xrsr_src_t src) {
 
    // Continue streaming audio to the websocket
    int pipe_fd_read = -1;
-   if(!xrsr_speech_stream_begin(sdt->uuid, sdt->audio_src, sdt->dst_index, sdt->xraudio_format, sdt->user_initiated, &pipe_fd_read)) {
+   if(!xrsr_speech_stream_begin(sdt->uuid, sdt->audio_src, sdt->dst_index, sdt->xraudio_format, sdt->user_initiated, sdt->low_latency, &pipe_fd_read)) {
       XLOGD_ERROR("xrsr_speech_stream_begin failed");
       // perform clean up of the session
       xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);

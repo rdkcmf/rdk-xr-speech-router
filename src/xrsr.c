@@ -1302,6 +1302,14 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
       }
       XLOGD_INFO("%u: src <%s>", index, xrsr_src_str(src));
 
+      if((uint32_t)g_xrsr.src == src) { // Terminate active session on this source since it is being altered
+         XLOGD_INFO("terminate source <%s>", xrsr_src_str(g_xrsr.src));
+         xrsr_queue_msg_session_terminate_t terminate;
+         terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+         terminate.semaphore   = NULL;
+         xrsr_msg_session_terminate(params, state, &terminate);
+      }
+
       xrsr_route_update(route_update->host_name, &route_update->routes[index], state);
       srcs[index] = src;
       index++;
@@ -1320,7 +1328,7 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
    }
 }
 
-bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char* transcription_in) {
+bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char* transcription_in, bool low_latency) {
    if(transcription_in == NULL && src != XRSR_SRC_MICROPHONE) {
       XLOGD_INFO("unsupported source <%s>", xrsr_src_str(src));
       return(false);
@@ -1329,10 +1337,10 @@ bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char
    xraudio_format.container   = XRAUDIO_CONTAINER_NONE;
    xraudio_format.encoding    = (format == XRSR_AUDIO_FORMAT_PCM_RAW) ? XRAUDIO_ENCODING_PCM_RAW : XRAUDIO_ENCODING_PCM;
    xraudio_format.sample_rate = XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE;
-   xraudio_format.sample_size = XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE;
-   xraudio_format.channel_qty = XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY;
+   xraudio_format.sample_size = (format == XRSR_AUDIO_FORMAT_PCM_RAW || format == XRSR_AUDIO_FORMAT_PCM_32_BIT || format == XRSR_AUDIO_FORMAT_PCM_32_BIT_MULTI) ? XRAUDIO_INPUT_MAX_SAMPLE_SIZE : XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE;
+   xraudio_format.channel_qty = (format == XRSR_AUDIO_FORMAT_PCM_RAW || format == XRSR_AUDIO_FORMAT_PCM_32_BIT_MULTI) ? XRAUDIO_INPUT_MAX_CHANNEL_QTY : XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY;
 
-   return(xrsr_xraudio_session_request(g_xrsr.xrsr_xraudio_object, src, xraudio_format, transcription_in));
+   return(xrsr_xraudio_session_request(g_xrsr.xrsr_xraudio_object, src, xraudio_format, transcription_in, low_latency));
 }
 
 bool xrsr_session_keyword_info_set(xrsr_src_t src, uint32_t keyword_begin, uint32_t keyword_duration) {
@@ -1457,6 +1465,14 @@ void xrsr_msg_power_mode_update(const xrsr_thread_params_t *params, xrsr_thread_
 
    XLOGD_INFO("power mode <%s>", xrsr_power_mode_str(power_mode_update->power_mode));
 
+   if(power_mode_update->power_mode != XRSR_POWER_MODE_FULL && (uint32_t)g_xrsr.src < XRSR_SRC_INVALID) { // Terminate active sessions
+      XLOGD_INFO("terminate source <%s>", xrsr_src_str(g_xrsr.src));
+      xrsr_queue_msg_session_terminate_t terminate;
+      terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+      terminate.semaphore   = NULL;
+      xrsr_msg_session_terminate(params, state, &terminate);
+   }
+   
    // Update the dst params for the new power mode
    for(uint32_t index_src = 0; index_src < XRSR_SRC_INVALID; index_src++) {
       for(uint32_t index_dst = 0; index_dst < XRSR_DST_QTY_MAX; index_dst++) {
@@ -1683,6 +1699,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             http->handlers       = dst->handlers;
             http->dst_index      = dst_index;
             http->xraudio_format = begin->xraudio_format;
+            http->low_latency    = begin->low_latency;
 
             if(transcription_in == NULL) {
                http->transcription_ptr = NULL;
@@ -1738,6 +1755,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                ws->handlers       = dst->handlers;
                ws->dst_index      = dst_index;
                ws->xraudio_format = begin->xraudio_format;
+               ws->low_latency    = begin->low_latency;
 
                if(!begin->retry && ws->handlers.session_begin != NULL) { // Call session begin handler
                   ws->session_config_in.ws.query_strs[0] = NULL;
@@ -1783,14 +1801,15 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
                // Set the handlers based on source
-               sdt->handlers  = dst->handlers;
-               sdt->dst_index = dst_index;
+               sdt->handlers    = dst->handlers;
+               sdt->dst_index   = dst_index;
+               sdt->low_latency = begin->low_latency;
 
                // Call session begin handler
                session_config->user_initiated = begin->user_initiated;
 
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(sdt->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(sdt->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, begin->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                   // perform clean up of the session
                   xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -1963,7 +1982,7 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
                bool deferred = ((dst->stream_time_min > 0) && !http->is_session_by_text) ? true : false;
 
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(http->uuid, g_xrsr.src, dst_index, http->xraudio_format, http->session_config_out.user_initiated, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(http->uuid, g_xrsr.src, dst_index, http->xraudio_format, http->session_config_out.user_initiated, http->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, http->xraudio_format, state->timer_obj, deferred, session_config_in_http->query_strs, http->transcription_ptr)) {
                   XLOGD_ERROR("http connect failed");
@@ -2034,7 +2053,7 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
 
                // start streaming audio to the pipe
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(ws->uuid, g_xrsr.src, ws->dst_index, ws->xraudio_format, ws->session_config_out.user_initiated, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(ws->uuid, g_xrsr.src, ws->dst_index, ws->xraudio_format, ws->session_config_out.user_initiated, ws->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                   // perform clean up of the session
                   xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -2334,7 +2353,7 @@ void xrsr_send_stream_data(xrsr_src_t src, uint8_t *buffer, uint32_t size)
    }
 }
 
-void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char *transcription_in) {
+void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char *transcription_in, bool low_latency) {
    if((uint32_t)src >= (uint32_t)XRSR_SRC_INVALID) {
       XLOGD_ERROR("invalid source <%s>", xrsr_src_str(src));
       return;
@@ -2348,7 +2367,7 @@ void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_forma
          XLOGD_ERROR("no handler for source <%s> dst index <%u>", xrsr_src_str(src), dst_index);
          return;
       }
-      (*dst->handler)(src, false, user_initiated, xraudio_format, detector_result, transcription_in);
+      (*dst->handler)(src, false, user_initiated, xraudio_format, detector_result, transcription_in, low_latency);
    }
 }
 
@@ -2410,7 +2429,7 @@ xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length
    return(ret == 1) ? XRSR_RESULT_SUCCESS : XRSR_RESULT_ERROR;
 }
 
-bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xraudio_input_format_t native_format, bool user_initiated, int *pipe_fd_read) {
+bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xraudio_input_format_t native_format, bool user_initiated, bool low_latency, int *pipe_fd_read) {
    if(!g_xrsr.first_stream_req) { // return the pipe for this destination
       *pipe_fd_read = g_xrsr.pipe_fds_rd[dst_index];
       return(true);
@@ -2465,7 +2484,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    switch(src) {
       case XRSR_SRC_RCU_PTT:    { source = XRAUDIO_DEVICE_INPUT_PTT;    break; }
       case XRSR_SRC_RCU_FF:     { source = XRAUDIO_DEVICE_INPUT_FF;     break; }
-      case XRSR_SRC_MICROPHONE: { source = (native_format.encoding == XRAUDIO_ENCODING_PCM_RAW) ? XRAUDIO_DEVICE_INPUT_TRI : XRAUDIO_DEVICE_INPUT_SINGLE; break; }
+      case XRSR_SRC_MICROPHONE: { source = (native_format.encoding == XRAUDIO_ENCODING_PCM_RAW || native_format.channel_qty > 1) ? XRAUDIO_DEVICE_INPUT_TRI : XRAUDIO_DEVICE_INPUT_SINGLE; break; }
       default: {
          XLOGD_ERROR("invalid src <%s>", xrsr_src_str(src));
          g_xrsr.first_stream_req = true;
@@ -2478,11 +2497,13 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    xraudio_input_format_t xraudio_format = native_format;
 
    switch(xrsr_audio_format_get(dst->formats, xraudio_format)) {
-      case XRSR_AUDIO_FORMAT_PCM:    { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;     xraudio_format.sample_size = 2; break; }
-      case XRSR_AUDIO_FORMAT_PCM_RAW:{ xraudio_format.encoding = XRAUDIO_ENCODING_PCM_RAW; xraudio_format.sample_size = 4; xraudio_format.channel_qty = 3; break; }
+      case XRSR_AUDIO_FORMAT_PCM:              { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;     xraudio_format.sample_size = XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE; xraudio_format.channel_qty = XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY; break; }
+      case XRSR_AUDIO_FORMAT_PCM_32_BIT:       { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;     xraudio_format.sample_size = XRAUDIO_INPUT_MAX_SAMPLE_SIZE;     xraudio_format.channel_qty = XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY; break; }
+      case XRSR_AUDIO_FORMAT_PCM_32_BIT_MULTI: { xraudio_format.encoding = XRAUDIO_ENCODING_PCM;     xraudio_format.sample_size = XRAUDIO_INPUT_MAX_SAMPLE_SIZE;     xraudio_format.channel_qty = XRAUDIO_INPUT_MAX_CHANNEL_QTY;     break; }
+      case XRSR_AUDIO_FORMAT_PCM_RAW:          { xraudio_format.encoding = XRAUDIO_ENCODING_PCM_RAW; xraudio_format.sample_size = XRAUDIO_INPUT_MAX_SAMPLE_SIZE;     xraudio_format.channel_qty = XRAUDIO_INPUT_MAX_CHANNEL_QTY;     break; }
       // This forwards all ADPCM / OPUS as it's native format. If we need to change this, then xrsr_audio_format_t will need to support the different versions.
-      case XRSR_AUDIO_FORMAT_ADPCM:  { if(xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_XVP && xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_SKY) xraudio_format.encoding = XRAUDIO_ENCODING_ADPCM; break; }
-      case XRSR_AUDIO_FORMAT_OPUS:   { if(xraudio_format.encoding != XRAUDIO_ENCODING_OPUS_XVP)  xraudio_format.encoding = XRAUDIO_ENCODING_OPUS;  break; }
+      case XRSR_AUDIO_FORMAT_ADPCM:            { if(xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_XVP && xraudio_format.encoding != XRAUDIO_ENCODING_ADPCM_SKY) xraudio_format.encoding = XRAUDIO_ENCODING_ADPCM; break; }
+      case XRSR_AUDIO_FORMAT_OPUS:             { if(xraudio_format.encoding != XRAUDIO_ENCODING_OPUS_XVP)  xraudio_format.encoding = XRAUDIO_ENCODING_OPUS;  break; }
       default: {
          xraudio_format.encoding = XRAUDIO_ENCODING_INVALID;
          break;
@@ -2504,7 +2525,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    }
    
    // Make a single call to start streaming to all destinations
-   if(!xrsr_xraudio_stream_begin(g_xrsr.xrsr_xraudio_object, uuid_str, source, user_initiated, &xraudio_format, dsts, dst->stream_time_min, user_initiated ? 0 : dst->keyword_begin, user_initiated ? 0 : dst->keyword_duration, frame_duration)) {
+   if(!xrsr_xraudio_stream_begin(g_xrsr.xrsr_xraudio_object, uuid_str, source, user_initiated, &xraudio_format, dsts, dst->stream_time_min, user_initiated ? 0 : dst->keyword_begin, user_initiated ? 0 : dst->keyword_duration, frame_duration, low_latency)) {
       for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
          if(dsts[index].pipe >= 0) {
             close(dsts[index].pipe);

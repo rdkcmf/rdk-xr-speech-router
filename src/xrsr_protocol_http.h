@@ -41,6 +41,7 @@ typedef struct {
    xrsr_src_t                   audio_src;
    uint32_t                     dst_index;
    xraudio_input_format_t       xraudio_format;
+   bool                         low_latency;
    uuid_t                       uuid;
    xrsr_session_config_out_t    session_config_out;
    xrsr_session_config_in_t     session_config_in;
@@ -67,7 +68,7 @@ typedef struct {
    bool                         detect_resume;
 } xrsr_state_http_t;
 
-void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
+void xrsr_protocol_handler_http(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency);
 bool xrsr_http_init(xrsr_state_http_t *http, bool debug);
 void xrsr_http_term(xrsr_state_http_t *http);
 void xrsr_http_terminate(xrsr_state_http_t *http);

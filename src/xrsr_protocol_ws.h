@@ -58,6 +58,7 @@ typedef struct {
    uint32_t                     dst_index;
    xraudio_input_format_t       xraudio_format;
    bool                         user_initiated;
+   bool                         low_latency;
    int                          audio_pipe_fd_read;
    bool                         write_pending_bytes;
    uint8_t                      write_pending_retries;
@@ -66,6 +67,7 @@ typedef struct {
    xrsr_session_stats_t         stats;
    xrsr_audio_stats_t           audio_stats;
    bool                         on_close;
+   int                          close_status;
 
    sem_t                        msg_out_semaphore;
    uint8_t                      msg_out_count;
@@ -98,7 +100,7 @@ typedef struct {
    bool                         detect_resume;
 } xrsr_state_ws_t;
 
-void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);
+void xrsr_protocol_handler_ws(xrsr_src_t src, bool retry, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency);
 bool xrsr_ws_init(xrsr_state_ws_t *ws, xrsr_ws_params_t *params);
 void xrsr_ws_term(xrsr_state_ws_t *ws);
 bool xrsr_ws_update_dst_params(xrsr_state_ws_t *ws, xrsr_dst_param_ptrs_t *params);

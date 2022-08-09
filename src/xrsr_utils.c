@@ -113,18 +113,19 @@ const char *xrsr_protocol_str(xrsr_protocol_t type) {
 
 const char *xrsr_session_end_reason_str(xrsr_session_end_reason_t type) {
    switch(type) {
-      case XRSR_SESSION_END_REASON_EOS:                   return("EOS");
-      case XRSR_SESSION_END_REASON_EOT:                   return("EOT");
-      case XRSR_SESSION_END_REASON_DISCONNECT_REMOTE:     return("DISCONNECT_REMOTE");
-      case XRSR_SESSION_END_REASON_TERMINATE:             return("TERMINATE");
-      case XRSR_SESSION_END_REASON_ERROR_INTERNAL:        return("ERROR_INTERNAL");
-      case XRSR_SESSION_END_REASON_ERROR_WS_SEND:         return("ERROR_WS_SEND");
-      case XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN:     return("ERROR_AUDIO_BEGIN");
-      case XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION:  return("ERROR_AUDIO_DURATION");
-      case XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE: return("ERROR_CONNECT_FAILURE");
-      case XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT: return("ERROR_CONNECT_TIMEOUT");
-      case XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT: return("ERROR_SESSION_TIMEOUT");
-      case XRSR_SESSION_END_REASON_INVALID:               return("INVALID");
+      case XRSR_SESSION_END_REASON_EOS:                     return("EOS");
+      case XRSR_SESSION_END_REASON_EOT:                     return("EOT");
+      case XRSR_SESSION_END_REASON_DISCONNECT_REMOTE:       return("DISCONNECT_REMOTE");
+      case XRSR_SESSION_END_REASON_TERMINATE:               return("TERMINATE");
+      case XRSR_SESSION_END_REASON_ERROR_INTERNAL:          return("ERROR_INTERNAL");
+      case XRSR_SESSION_END_REASON_ERROR_WS_SEND:           return("ERROR_WS_SEND");
+      case XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN:       return("ERROR_AUDIO_BEGIN");
+      case XRSR_SESSION_END_REASON_ERROR_AUDIO_DURATION:    return("ERROR_AUDIO_DURATION");
+      case XRSR_SESSION_END_REASON_ERROR_CONNECT_FAILURE:   return("ERROR_CONNECT_FAILURE");
+      case XRSR_SESSION_END_REASON_ERROR_CONNECT_TIMEOUT:   return("ERROR_CONNECT_TIMEOUT");
+      case XRSR_SESSION_END_REASON_ERROR_SESSION_TIMEOUT:   return("ERROR_SESSION_TIMEOUT");
+      case XRSR_SESSION_END_REASON_ERROR_DISCONNECT_REMOTE: return("ERROR_DISCONNECT_REMOTE");
+      case XRSR_SESSION_END_REASON_INVALID:                 return("INVALID");
    }
    return(xrsr_invalid_return(type));
 }
@@ -152,10 +153,13 @@ const char *xrsr_recv_msg_str(xrsr_recv_msg_t type) {
 
 const char *xrsr_audio_format_str(xrsr_audio_format_t format) {
    switch(format) {
-      case XRSR_AUDIO_FORMAT_PCM:      return("PCM");
-      case XRSR_AUDIO_FORMAT_ADPCM:    return("ADPCM");
-      case XRSR_AUDIO_FORMAT_OPUS:     return("OPUS");
-      case XRSR_AUDIO_FORMAT_NONE:     return("NONE");
+      case XRSR_AUDIO_FORMAT_PCM:              return("PCM");
+      case XRSR_AUDIO_FORMAT_PCM_32_BIT:       return("PCM_32_BIT");
+      case XRSR_AUDIO_FORMAT_PCM_32_BIT_MULTI: return("PCM_32_BIT_MULTI");
+      case XRSR_AUDIO_FORMAT_PCM_RAW:          return("PCM_RAW");
+      case XRSR_AUDIO_FORMAT_ADPCM:            return("ADPCM");
+      case XRSR_AUDIO_FORMAT_OPUS:             return("OPUS");
+      case XRSR_AUDIO_FORMAT_NONE:             return("NONE");
       default: break;
    }
    return(xrsr_invalid_return(format));
