@@ -511,6 +511,13 @@ bool xrsr_host_name_set(const char *host_name);
 /// @return The function returns true if successful or false otherwise.
 bool xrsr_keyword_config_set(const xrsr_keyword_config_t *keyword_config);
 
+/// @brief Get the speech router keyword sensitivity limits
+/// @details Given float pointers, gets the keyword detector sensitivity minimum and maximum limits
+/// @param[in] type float pointer sensitivity minimum
+/// @param[in] type float pointer sensitivity maximum
+/// @return The function returns true if successful or false otherwise
+bool xrsr_keyword_sensitivity_limits_get(float *sensitivity_min, float *sensitivity_max);
+
 /// @brief Sets the speech router power mode
 /// @details Replaces the current power mode. This call is synchronous and will block until completion or an error occurs.
 /// @param[in] power_mode Power mode.

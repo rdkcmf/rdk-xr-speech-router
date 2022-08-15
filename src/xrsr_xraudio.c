@@ -908,6 +908,27 @@ bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled) 
    return true;
 }
 
+bool xrsr_xraudio_keyword_detect_sensitivity_limits_get(xrsr_xraudio_object_t object, xraudio_keyword_sensitivity_t *keyword_sensitivity_min, xraudio_keyword_sensitivity_t *keyword_sensitivity_max) {
+   xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
+
+   if(!xrsr_xraudio_object_is_valid(obj)) {
+      XLOGD_ERROR("invalid xrsr xraudio object");
+      return false;
+   }
+   if(keyword_sensitivity_min == NULL || keyword_sensitivity_max == NULL) {
+      XLOGD_ERROR("invalid pointer");
+      return false;
+   }
+
+   xraudio_result_t result = xraudio_detect_sensitivity_limits_get(obj->xraudio_obj, keyword_sensitivity_min, keyword_sensitivity_max);
+   if(XRAUDIO_RESULT_OK != result) {
+      XLOGD_ERROR("xraudio_detect_sensitivity_limits_get returned <%s>", xraudio_result_str(result));
+      return false;
+   }
+
+   return true;
+}
+
 xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format) {
    xrsr_audio_format_t ret = XRSR_AUDIO_FORMAT_NONE;
    switch(format.encoding) {

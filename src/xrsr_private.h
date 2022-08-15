@@ -33,25 +33,26 @@
 #include <xrsr_config.h>
 
 typedef enum {
-   XRSR_QUEUE_MSG_TYPE_TERMINATE             =  0,
-   XRSR_QUEUE_MSG_TYPE_ROUTE_UPDATE          =  1,
-   XRSR_QUEUE_MSG_TYPE_KEYWORD_UPDATE        =  2,
-   XRSR_QUEUE_MSG_TYPE_HOST_NAME_UPDATE      =  3,
-   XRSR_QUEUE_MSG_TYPE_POWER_MODE_UPDATE     =  4,
-   XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_UPDATE   =  5,
-   XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET      =  6,
-   XRSR_QUEUE_MSG_TYPE_XRAUDIO_GRANTED       =  7,
-   XRSR_QUEUE_MSG_TYPE_XRAUDIO_REVOKED       =  8,
-   XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT         =  9,
-   XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECTED      = 10,
-   XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_ERROR  = 11,
-   XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN         = 12,
-   XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN     = 13,
-   XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE     = 14,
-   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START = 15,
-   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP  = 16,
-   XRSR_QUEUE_MSG_TYPE_THREAD_POLL           = 17,
-   XRSR_QUEUE_MSG_TYPE_INVALID               = 18,
+   XRSR_QUEUE_MSG_TYPE_TERMINATE                               =  0,
+   XRSR_QUEUE_MSG_TYPE_ROUTE_UPDATE                            =  1,
+   XRSR_QUEUE_MSG_TYPE_KEYWORD_UPDATE                          =  2,
+   XRSR_QUEUE_MSG_TYPE_HOST_NAME_UPDATE                        =  3,
+   XRSR_QUEUE_MSG_TYPE_POWER_MODE_UPDATE                       =  4,
+   XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_UPDATE                     =  5,
+   XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET                        =  6,
+   XRSR_QUEUE_MSG_TYPE_XRAUDIO_GRANTED                         =  7,
+   XRSR_QUEUE_MSG_TYPE_XRAUDIO_REVOKED                         =  8,
+   XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT                           =  9,
+   XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECTED                        = 10,
+   XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_ERROR                    = 11,
+   XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_SENSITIVITY_LIMITS_GET   = 12,
+   XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN                           = 13,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN                       = 14,
+   XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE                       = 15,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START                   = 16,
+   XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP                    = 17,
+   XRSR_QUEUE_MSG_TYPE_THREAD_POLL                             = 18,
+   XRSR_QUEUE_MSG_TYPE_INVALID                                 = 19,
 } xrsr_queue_msg_type_t;
 
 typedef enum {
@@ -131,6 +132,14 @@ typedef struct {
    sem_t *                      semaphore;
    const xrsr_keyword_config_t *keyword_config;
 } xrsr_queue_msg_keyword_update_t;
+
+typedef struct {
+   xrsr_queue_msg_header_t header;
+   sem_t *                 semaphore;
+   float *                 sensitivity_min;
+   float *                 sensitivity_max;
+   bool *                  result;
+} xrsr_queue_msg_keyword_sensitivity_limits_get_t ;
 
 typedef struct {
    xrsr_queue_msg_header_t      header;
@@ -230,19 +239,20 @@ typedef struct {
 // Make sure all vrexm_queue_msg types are added to this union so
 // that XRSR_MSG_QUEUE_MSG_SIZE_MAX can be set to the max message size
 typedef union {
-   xrsr_queue_msg_generic_t               generic;
-   xrsr_queue_msg_term_t                  term;
-   xrsr_queue_msg_route_update_t          route_update;
-   xrsr_queue_msg_keyword_update_t        keyword_update;
-   xrsr_queue_msg_keyword_detected_t      keyword_detected;
-   xrsr_queue_msg_session_begin_t         session_begin;
-   xrsr_queue_msg_session_config_in_t     session_config_in;
-   xrsr_queue_msg_session_terminate_t     session_terminate;
-   xrsr_queue_msg_xraudio_in_event_t      xraudio_in_event;
-   xrsr_queue_msg_session_capture_start_t session_capture_start;
-   xrsr_queue_msg_session_capture_stop_t  session_capture_stop;
-   xrsr_queue_msg_privacy_mode_get_t      privacy_mode_get;
-   xrsr_queue_msg_thread_poll_t           thread_poll;
+   xrsr_queue_msg_generic_t                        generic;
+   xrsr_queue_msg_term_t                           term;
+   xrsr_queue_msg_route_update_t                   route_update;
+   xrsr_queue_msg_keyword_update_t                 keyword_update;
+   xrsr_queue_msg_keyword_detected_t               keyword_detected;
+   xrsr_queue_msg_keyword_sensitivity_limits_get_t keyword_sensitivity_limits_get;
+   xrsr_queue_msg_session_begin_t                  session_begin;
+   xrsr_queue_msg_session_config_in_t              session_config_in;
+   xrsr_queue_msg_session_terminate_t              session_terminate;
+   xrsr_queue_msg_xraudio_in_event_t               xraudio_in_event;
+   xrsr_queue_msg_session_capture_start_t          session_capture_start;
+   xrsr_queue_msg_session_capture_stop_t           session_capture_stop;
+   xrsr_queue_msg_privacy_mode_get_t               privacy_mode_get;
+   xrsr_queue_msg_thread_poll_t                    thread_poll;
 } xrsr_queue_msg_union_t;
 
 typedef void *xrsr_xraudio_object_t;
@@ -301,6 +311,7 @@ void xrsr_xraudio_thread_poll(xrsr_xraudio_object_t object, xrsr_thread_poll_fun
 bool xrsr_xraudio_power_mode_update(xrsr_xraudio_object_t object, xrsr_power_mode_t power_mode);
 bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable);
 bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled);
+bool xrsr_xraudio_keyword_detect_sensitivity_limits_get(xrsr_xraudio_object_t object, xraudio_keyword_sensitivity_t *keyword_sensitivity_min, xraudio_keyword_sensitivity_t *keyword_sensitivity_max);
 xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format);
 
 void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in);

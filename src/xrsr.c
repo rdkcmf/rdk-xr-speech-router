@@ -139,24 +139,25 @@ static void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_c
 
 typedef void (*xrsr_msg_handler_t)(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 
-static void xrsr_msg_terminate            (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_route_update         (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_keyword_update       (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_host_name_update     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_power_mode_update    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_privacy_mode_update  (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_privacy_mode_get     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_xraudio_granted      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_xraudio_revoked      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_xraudio_event        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_keyword_detected     (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_keyword_detect_error (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_session_begin        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_session_config_in    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_session_terminate    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_session_capture_start(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_session_capture_stop (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
-static void xrsr_msg_thread_poll          (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_terminate                              (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_route_update                           (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_keyword_update                         (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_host_name_update                       (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_power_mode_update                      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_privacy_mode_update                    (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_privacy_mode_get                       (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_xraudio_granted                        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_xraudio_revoked                        (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_xraudio_event                          (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_keyword_detected                       (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_keyword_detect_error                   (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_keyword_detect_sensitivity_limits_get  (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_begin                          (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_config_in                      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_terminate                      (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_capture_start                  (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_session_capture_stop                   (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
+static void xrsr_msg_thread_poll                            (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 
 static const xrsr_msg_handler_t g_xrsr_msg_handlers[XRSR_QUEUE_MSG_TYPE_INVALID] = {
    xrsr_msg_terminate,
@@ -171,6 +172,7 @@ static const xrsr_msg_handler_t g_xrsr_msg_handlers[XRSR_QUEUE_MSG_TYPE_INVALID]
    xrsr_msg_xraudio_event,
    xrsr_msg_keyword_detected,
    xrsr_msg_keyword_detect_error,
+   xrsr_msg_keyword_detect_sensitivity_limits_get,
    xrsr_msg_session_begin,
    xrsr_msg_session_config_in,
    xrsr_msg_session_terminate,
@@ -921,6 +923,35 @@ bool xrsr_keyword_config_set(const xrsr_keyword_config_t *keyword_config) {
    return(true);
 }
 
+bool xrsr_keyword_sensitivity_limits_get(float *sensitivity_min, float *sensitivity_max) {
+   if(!g_xrsr.opened) {
+      XLOGD_ERROR("not opened");
+      return(false);
+   }
+   if(sensitivity_min == NULL || sensitivity_max == NULL) {
+      XLOGD_ERROR("invalid parameters");
+      return(false);
+   }
+
+   bool result = false;
+   sem_t semaphore;
+   sem_init(&semaphore, 0, 0);
+
+   // Get the keyword detector sensitivity limits
+   xrsr_queue_msg_keyword_sensitivity_limits_get_t msg;
+   msg.header.type      = XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_SENSITIVITY_LIMITS_GET;
+   msg.semaphore        = &semaphore;
+   msg.sensitivity_min  = sensitivity_min;
+   msg.sensitivity_max  = sensitivity_max;
+   msg.result           = &result;
+
+   xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+   sem_wait(&semaphore);
+   sem_destroy(&semaphore);
+
+   return(result);
+}
+
 bool xrsr_power_mode_set(xrsr_power_mode_t power_mode) {
    if(!g_xrsr.opened) {
       XLOGD_ERROR("not opened");
@@ -1535,6 +1566,19 @@ void xrsr_msg_keyword_detected(const xrsr_thread_params_t *params, xrsr_thread_s
 void xrsr_msg_keyword_detect_error(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_keyword_detected_t *keyword_detected = (xrsr_queue_msg_keyword_detected_t *)msg;
    xrsr_xraudio_keyword_detect_error(g_xrsr.xrsr_xraudio_object, keyword_detected->source);
+}
+
+void xrsr_msg_keyword_detect_sensitivity_limits_get(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
+   xrsr_queue_msg_keyword_sensitivity_limits_get_t *keyword_sensitivity_limits_get = (xrsr_queue_msg_keyword_sensitivity_limits_get_t *)msg;
+
+   bool result = xrsr_xraudio_keyword_detect_sensitivity_limits_get(g_xrsr.xrsr_xraudio_object, keyword_sensitivity_limits_get->sensitivity_min, keyword_sensitivity_limits_get->sensitivity_max);
+
+   if(keyword_sensitivity_limits_get->semaphore != NULL) {
+      if(keyword_sensitivity_limits_get->result != NULL) {
+         *(keyword_sensitivity_limits_get->result) = result;
+      }
+      sem_post(keyword_sensitivity_limits_get->semaphore);
+   }
 }
 
 void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
@@ -2259,6 +2303,7 @@ void xrsr_msg_privacy_mode_get(const xrsr_thread_params_t *params, xrsr_thread_s
       sem_post(privacy_mode_get->semaphore);
    }
 }
+
 void xrsr_send_stream_data(xrsr_src_t src, uint8_t *buffer, uint32_t size)
 {
   if((uint32_t)src >= (uint32_t)XRSR_SRC_INVALID) {

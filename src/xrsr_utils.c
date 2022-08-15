@@ -63,25 +63,26 @@ const char *xrsr_result_str(xrsr_result_t type) {
 
 const char *xrsr_queue_msg_type_str(xrsr_queue_msg_type_t type) {
    switch(type) {
-      case XRSR_QUEUE_MSG_TYPE_TERMINATE:             return("TERMINATE");
-      case XRSR_QUEUE_MSG_TYPE_ROUTE_UPDATE:          return("ROUTE_UPDATE");
-      case XRSR_QUEUE_MSG_TYPE_KEYWORD_UPDATE:        return("KEYWORD_UPDATE");
-      case XRSR_QUEUE_MSG_TYPE_HOST_NAME_UPDATE:      return("HOST_NAME_UPDATE");
-      case XRSR_QUEUE_MSG_TYPE_POWER_MODE_UPDATE:     return("POWER_MODE_UPDATE");
-      case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_UPDATE:   return("PRIVACY_MODE_UPDATE");
-      case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET:      return("PRIVACY_MODE_GET");
-      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_GRANTED:       return("XRAUDIO_GRANT");
-      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_REVOKED:       return("XRAUDIO_REVOKE");
-      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT:         return("XRAUDIO_EVENT");
-      case XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECTED:      return("KEYWORD_DETECTED");
-      case XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_ERROR:  return("KEYWORD_DETECT_ERROR");
-      case XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN:         return("SESSION_BEGIN");
-      case XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN:     return("SESSION_CONFIG_IN");
-      case XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE:     return("SESSION_TERMINATE");
-      case XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START: return("SESSION_CAPTURE_START");
-      case XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP:  return("SESSION_CAPTURE_STOP");
-      case XRSR_QUEUE_MSG_TYPE_THREAD_POLL:           return("THREAD_POLL");
-      case XRSR_QUEUE_MSG_TYPE_INVALID:               return("INVALID");
+      case XRSR_QUEUE_MSG_TYPE_TERMINATE:                               return("TERMINATE");
+      case XRSR_QUEUE_MSG_TYPE_ROUTE_UPDATE:                            return("ROUTE_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_KEYWORD_UPDATE:                          return("KEYWORD_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_HOST_NAME_UPDATE:                        return("HOST_NAME_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_POWER_MODE_UPDATE:                       return("POWER_MODE_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_UPDATE:                     return("PRIVACY_MODE_UPDATE");
+      case XRSR_QUEUE_MSG_TYPE_PRIVACY_MODE_GET:                        return("PRIVACY_MODE_GET");
+      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_GRANTED:                         return("XRAUDIO_GRANT");
+      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_REVOKED:                         return("XRAUDIO_REVOKE");
+      case XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT:                           return("XRAUDIO_EVENT");
+      case XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECTED:                        return("KEYWORD_DETECTED");
+      case XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_ERROR:                    return("KEYWORD_DETECT_ERROR");
+      case XRSR_QUEUE_MSG_TYPE_KEYWORD_DETECT_SENSITIVITY_LIMITS_GET:   return("KEYWORD_DETECT_SENSITIVITY_LIMITS_GET");
+      case XRSR_QUEUE_MSG_TYPE_SESSION_BEGIN:                           return("SESSION_BEGIN");
+      case XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN:                       return("SESSION_CONFIG_IN");
+      case XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE:                       return("SESSION_TERMINATE");
+      case XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_START:                   return("SESSION_CAPTURE_START");
+      case XRSR_QUEUE_MSG_TYPE_SESSION_CAPTURE_STOP:                    return("SESSION_CAPTURE_STOP");
+      case XRSR_QUEUE_MSG_TYPE_THREAD_POLL:                             return("THREAD_POLL");
+      case XRSR_QUEUE_MSG_TYPE_INVALID:                                 return("INVALID");
    }
    return(xrsr_invalid_return(type));
 }
