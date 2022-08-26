@@ -29,9 +29,17 @@
 #define FRAME_GROUP_SIZE_MAX (4096)
 
 typedef struct {
+   bool                          active;
+   bool                          detecting;
+   bool                          audio_stats_rxd;
+   xrsr_audio_stats_t            audio_stats;
+} xrsr_xraudio_stream_t;
+
+typedef struct {
    uint32_t                      identifier;
    xraudio_object_t              xraudio_obj;
    xrsr_xraudio_state_t          xraudio_state;
+   xrsr_xraudio_stream_t         xraudio_streams[XRSR_SESSION_GROUP_QTY];
    xraudio_power_mode_t          xraudio_power_mode;
    bool                          xraudio_privacy_mode;
    xraudio_devices_input_t       device_input;
@@ -39,8 +47,6 @@ typedef struct {
    bool                          detect_active;
    xraudio_keyword_phrase_t      keyword_phrase;
    xraudio_keyword_sensitivity_t keyword_sensitivity;
-   bool                          audio_stats_rxd;
-   xrsr_audio_stats_t            audio_stats;
    xraudio_devices_input_t       available_inputs[XRAUDIO_INPUT_MAX_DEVICE_QTY];
    xraudio_devices_output_t      available_outputs[XRAUDIO_OUTPUT_MAX_DEVICE_QTY];
 } xrsr_xraudio_obj_t;
@@ -54,9 +60,9 @@ static void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_c
 static void xrsr_xraudio_device_close(xrsr_xraudio_object_t object);
 static void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj);
 static void xrsr_xraudio_keyword_detect_stop(xrsr_xraudio_obj_t *obj);
-static xrsr_src_t xrsr_xraudio_src_to_xrsr(xraudio_devices_input_t src);
-static void xrsr_audio_stats_clear(xrsr_xraudio_obj_t *obj);
+static void xrsr_audio_stats_clear(xrsr_xraudio_stream_t *stream);
 static void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj);
+static __inline xrsr_session_group_t xrsr_xraudio_source_to_group(xraudio_devices_input_t source);
 
 static xraudio_devices_input_t g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
 static xraudio_devices_input_t g_local_mic_low_power  = XRAUDIO_DEVICE_INPUT_NONE;
@@ -74,6 +80,9 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
       return(NULL);
    }
 
+   errno_t safec_rc = memset_s(obj, sizeof(*obj), 0, sizeof(*obj));
+   ERR_CHK(safec_rc);
+
    obj->identifier           = XRSR_XRAUDIO_IDENTIFIER;
    obj->xraudio_state        = XRSR_XRAUDIO_STATE_CREATED;
    obj->xraudio_power_mode   = power_mode;
@@ -83,8 +92,6 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
    obj->detect_active        = true;
    obj->keyword_phrase       = keyword_phrase;
    obj->keyword_sensitivity  = keyword_sensitivity;
-   obj->audio_stats_rxd      = false;
-   xrsr_audio_stats_clear(obj);
    obj->xraudio_obj          = xraudio_object_create(json_obj_xraudio);
    if(obj->xraudio_obj == NULL) {
       XLOGD_ERROR("unable to create xraudio object");
@@ -227,6 +234,7 @@ void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[])
          break;
       }
       switch(srcs[index]) {
+         case XRSR_SRC_MICROPHONE_TAP:
          case XRSR_SRC_MICROPHONE: {
             if(obj->xraudio_power_mode == XRAUDIO_POWER_MODE_LOW) {
                obj->device_input |= g_local_mic_low_power;
@@ -358,14 +366,17 @@ void xrsr_xraudio_device_close(xrsr_xraudio_object_t object) {
    }
 
    XLOGD_INFO("");
-
-   if(obj->xraudio_state == XRSR_XRAUDIO_STATE_STREAMING) {
-      xraudio_stream_stop(obj->xraudio_obj, -1);
-      obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
-   }
-   if(obj->xraudio_state == XRSR_XRAUDIO_STATE_DETECTING) {
-      xraudio_detect_stop(obj->xraudio_obj);
-      obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
+   for(uint32_t group = XRSR_SESSION_GROUP_DEFAULT; group < XRSR_SESSION_GROUP_QTY; group++) {
+      xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[group];
+      if(stream->active) {
+         xraudio_devices_input_t device = (group == XRSR_SESSION_GROUP_DEFAULT) ? obj->device_input : XRAUDIO_DEVICE_INPUT_MIC_TAP;
+         xraudio_stream_stop(obj->xraudio_obj, device, -1);
+         stream->active = false;
+      }
+      if(stream->detecting) {
+         xraudio_detect_stop(obj->xraudio_obj);
+         stream->detecting = false;
+      }
    }
 
    if(obj->xraudio_state == XRSR_XRAUDIO_STATE_OPENED) {
@@ -395,7 +406,9 @@ void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *object, xraudio_k
    obj->keyword_phrase        = keyword_phrase;
    obj->keyword_sensitivity   = keyword_sensitivity;
 
-   if(changed && (obj->xraudio_state == XRSR_XRAUDIO_STATE_DETECTING)) {
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[XRSR_SESSION_GROUP_DEFAULT];
+
+   if(changed && (stream->detecting)) {
       xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_sensitivity);
       if(XRAUDIO_RESULT_OK != result) {
          XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
@@ -416,6 +429,8 @@ void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object) {
 void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
    XLOGD_INFO("phrase <%s> sensitivity <%f>", xraudio_keyword_phrase_str(obj->keyword_phrase), obj->keyword_sensitivity);
 
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[XRSR_SESSION_GROUP_DEFAULT];
+
    xraudio_result_t result = xraudio_detect_params(obj->xraudio_obj, obj->keyword_phrase, obj->keyword_sensitivity);
    if(XRAUDIO_RESULT_OK != result) {
       XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
@@ -425,7 +440,7 @@ void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_ERROR("xraudio keyword detect <%s>", xraudio_result_str(result));
    } else {
-      obj->xraudio_state = XRSR_XRAUDIO_STATE_DETECTING;
+      stream->detecting = true;
    }
 }
 
@@ -447,8 +462,11 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
       XLOGD_ERROR("invalid xrsr xraudio object");
       return;
    }
-   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_DETECTING) {
-      XLOGD_ERROR("invalid state <%s>", xrsr_xraudio_state_str(obj->xraudio_state));
+
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[XRSR_SESSION_GROUP_DEFAULT];
+
+   if(!stream->detecting) {
+      XLOGD_ERROR("state <%s> not detecting", xrsr_xraudio_state_str(obj->xraudio_state));
       return;
    }
    
@@ -495,8 +513,10 @@ void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_dev
       XLOGD_ERROR("invalid xrsr xraudio object");
       return;
    }
-   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_DETECTING) {
-      XLOGD_ERROR("invalid state <%s>", xrsr_xraudio_state_str(obj->xraudio_state));
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[XRSR_SESSION_GROUP_DEFAULT];
+
+   if(!stream->detecting) {
+      XLOGD_ERROR("invalid state <%s> not detecting", xrsr_xraudio_state_str(obj->xraudio_state));
       return;
    }
 
@@ -546,6 +566,7 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
       XLOGD_ERROR("invalid xrsr xraudio object");
       return(false);
    }
+
    if(obj->xraudio_state != XRSR_XRAUDIO_STATE_OPENED) {
       XLOGD_ERROR("invalid state <%s>", xrsr_xraudio_state_str(obj->xraudio_state));
       return(false);
@@ -566,34 +587,35 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
       frame_group_quantity = XRAUDIO_INPUT_MIN_FRAME_GROUP_QTY;
    }
 
-   XLOGD_INFO("stream id <%s> source <%s> user <%s> pipe <%d, %d> frame size <%llu> group qty <%u> duration <%u> usecs", stream_id, xraudio_devices_input_str(source), user_initiated ? "YES" : "NO", dsts[0].pipe, dsts[1].pipe, frame_byte_qty, frame_group_quantity, frame_duration);
-
    xraudio_stream_latency_mode_t latency_mode = (low_latency) ? XRAUDIO_STREAM_LATENCY_LOW : XRAUDIO_STREAM_LATENCY_NORMAL;
+
+   XLOGD_INFO("stream id <%s> source <%s> latency <%s> user <%s> pipe <%d, %d> frame size <%llu> group qty <%u> duration <%u> usecs", stream_id, xraudio_devices_input_str(source), xraudio_stream_latency_mode_str(latency_mode), user_initiated ? "YES" : "NO", dsts[0].pipe, dsts[1].pipe, frame_byte_qty, frame_group_quantity, frame_duration);
+
    xraudio_result_t result = XRAUDIO_RESULT_OK;
    if(latency_mode != XRAUDIO_STREAM_LATENCY_NORMAL) {
-      result = xraudio_stream_latency_mode_set(obj->xraudio_obj, latency_mode);
+      result = xraudio_stream_latency_mode_set(obj->xraudio_obj, source, latency_mode);
       if(result != XRAUDIO_RESULT_OK) {
          XLOGD_WARN("unable to set stream to low latency <%s>", xraudio_result_str(result));
       }
    }
 
-   result = xraudio_stream_frame_group_quantity_set(obj->xraudio_obj, frame_group_quantity);
+   result = xraudio_stream_frame_group_quantity_set(obj->xraudio_obj, source, frame_group_quantity);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_WARN("unable to set frame group quantity <%s>", xraudio_result_str(result));
    }
 
-   result = xraudio_stream_identifier_set(obj->xraudio_obj, stream_id);
+   result = xraudio_stream_identifier_set(obj->xraudio_obj, source, stream_id);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_WARN("unable to set stream id <%s>", xraudio_result_str(result));
    }
 
-   result = xraudio_stream_time_minimum(obj->xraudio_obj, stream_time_min);
+   result = xraudio_stream_time_minimum(obj->xraudio_obj, source, stream_time_min);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_WARN("unable to set stream time min <%s>", xraudio_result_str(result));
    }
 
    if(keyword_duration != 0) { // Keyword is present
-      result = xraudio_stream_keyword_info(obj->xraudio_obj, keyword_begin, keyword_duration);
+      result = xraudio_stream_keyword_info(obj->xraudio_obj, source, keyword_begin, keyword_duration);
       if(result != XRAUDIO_RESULT_OK) {
          XLOGD_WARN("unable to set stream keyword info <%s>", xraudio_result_str(result));
       }
@@ -605,45 +627,62 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
       XLOGD_ERROR("xraudio_stream_to_pipe <%s>", xraudio_result_str(result));
       return(false);
    }
-   obj->xraudio_state = XRSR_XRAUDIO_STATE_STREAMING;
+
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[xrsr_xraudio_source_to_group(source)];
+   stream->active = true;
    return(true);
 }
 
-bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats) {
+xrsr_session_group_t xrsr_xraudio_source_to_group(xraudio_devices_input_t source) {
+   #ifdef MICROPHONE_TAP_ENABLED
+   if(source == XRAUDIO_DEVICE_INPUT_MIC_TAP) {
+      return(XRSR_SESSION_GROUP_MIC_TAP);
+   }
+   #endif
+   return(XRSR_SESSION_GROUP_DEFAULT);
+}
+
+bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, xraudio_devices_input_t source, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats) {
    xrsr_xraudio_obj_t *obj = (xrsr_xraudio_obj_t *)object;
 
    if(!xrsr_xraudio_object_is_valid(obj)) {
-      XLOGD_ERROR("invalid xrsr xraudio object");
-      return(false);
-   }
-   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_OPENED && obj->xraudio_state != XRSR_XRAUDIO_STATE_STREAMING) {
-      XLOGD_ERROR("invalid state <%s>", xrsr_xraudio_state_str(obj->xraudio_state));
+      XLOGD_ERROR("src <%s> invalid xrsr xraudio object", xraudio_devices_input_str(source));
       return(false);
    }
 
-   XLOGD_INFO("state <%s> more streams <%s>", xrsr_xraudio_state_str(obj->xraudio_state), more_streams ? "YES" : "NO");
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[xrsr_xraudio_source_to_group(source)];
+   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_OPENED && !stream->active) {
+      XLOGD_ERROR("src <%s> invalid state <%s>", xraudio_devices_input_str(source), xrsr_xraudio_state_str(obj->xraudio_state));
+      return(false);
+   }
 
-   if(obj->xraudio_state == XRSR_XRAUDIO_STATE_STREAMING) {
-      xraudio_result_t result = xraudio_stream_stop(obj->xraudio_obj, dst_index);
+   XLOGD_INFO("src <%s> state <%s> more streams <%s>", xraudio_devices_input_str(source), xrsr_xraudio_state_str(obj->xraudio_state), more_streams ? "YES" : "NO");
+
+   if(stream->active) {
+      xraudio_result_t result = xraudio_stream_stop(obj->xraudio_obj, source, dst_index);
 
       if(result != XRAUDIO_RESULT_OK) {
-          XLOGD_ERROR("xraudio_stream_stop <%s> dst index <%u>", xraudio_result_str(result), dst_index);
+          XLOGD_ERROR("src <%s> xraudio_stream_stop <%s> dst index <%u>", xraudio_devices_input_str(source), xraudio_result_str(result), dst_index);
           return(false);
       }
+      stream->active = false;
    }
 
    if(audio_stats != NULL) {
-      *audio_stats = obj->audio_stats;
+      *audio_stats = stream->audio_stats;
    }
 
    if(!more_streams) { // no more streams open
       obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
-      obj->detect_active = detect_resume;
 
-      if(obj->detect_active) { // Start detector again
-         xrsr_xraudio_keyword_detect_start(obj);
+      if(source != XRAUDIO_DEVICE_INPUT_MIC_TAP) {
+         obj->detect_active = detect_resume;
+
+         if(obj->detect_active) { // Start detector again
+            xrsr_xraudio_keyword_detect_start(obj);
+         }
       }
-      xrsr_audio_stats_clear(obj);
+      xrsr_audio_stats_clear(stream);
    }
 
    return(true);
@@ -656,6 +695,8 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
    memset(&msg, 0, sizeof(msg));
    msg.header.type = XRSR_QUEUE_MSG_TYPE_XRAUDIO_EVENT;
    msg.event.src   = xrsr_xraudio_src_to_xrsr(source);
+
+   xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[xrsr_xraudio_source_to_group(source)];
    switch(event) {
       case AUDIO_IN_CALLBACK_EVENT_EOS:
       case AUDIO_IN_CALLBACK_EVENT_EOS_TIMEOUT_INITIAL:
@@ -663,15 +704,15 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
          msg.event.event = XRSR_EVENT_EOS;
          if(event_param) {
             xraudio_audio_stats_t *xraudio_audio_stats = (xraudio_audio_stats_t *)event_param;
-            obj->audio_stats.packets_processed    = xraudio_audio_stats->packets_processed;
-            obj->audio_stats.packets_lost         = xraudio_audio_stats->packets_lost;
-            obj->audio_stats.samples_processed    = xraudio_audio_stats->samples_processed;
-            obj->audio_stats.samples_lost         = xraudio_audio_stats->samples_lost;
-            obj->audio_stats.decoder_failures     = xraudio_audio_stats->decoder_failures;
-            obj->audio_stats.samples_buffered_max = xraudio_audio_stats->samples_buffered_max;
-            obj->audio_stats.valid                = true;
+            stream->audio_stats.packets_processed    = xraudio_audio_stats->packets_processed;
+            stream->audio_stats.packets_lost         = xraudio_audio_stats->packets_lost;
+            stream->audio_stats.samples_processed    = xraudio_audio_stats->samples_processed;
+            stream->audio_stats.samples_lost         = xraudio_audio_stats->samples_lost;
+            stream->audio_stats.decoder_failures     = xraudio_audio_stats->decoder_failures;
+            stream->audio_stats.samples_buffered_max = xraudio_audio_stats->samples_buffered_max;
+            stream->audio_stats.valid                = true;
 
-            XLOGD_DEBUG("xraudio stats - packets processed <%u> lost <%u> samples processed <%u> lost <%u> decoder failures <%u>", obj->audio_stats.packets_processed, obj->audio_stats.packets_lost, obj->audio_stats.samples_processed, obj->audio_stats.samples_lost, obj->audio_stats.decoder_failures);
+            XLOGD_DEBUG("xraudio stats - packets processed <%u> lost <%u> samples processed <%u> lost <%u> decoder failures <%u>", stream->audio_stats.packets_processed, stream->audio_stats.packets_lost, stream->audio_stats.samples_processed, stream->audio_stats.samples_lost, stream->audio_stats.decoder_failures);
          } else {
             XLOGD_DEBUG("xraudio did NOT provided stats with EOS event");
          }
@@ -707,14 +748,20 @@ bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, 
       XLOGD_ERROR("invalid xrsr xraudio object");
       return(false);
    }
-   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_OPENED && obj->xraudio_state != XRSR_XRAUDIO_STATE_DETECTING) {
+   if(obj->xraudio_state != XRSR_XRAUDIO_STATE_OPENED) {
       XLOGD_ERROR("invalid state <%s>", xrsr_xraudio_state_str(obj->xraudio_state));
       return(false);
    }
+   if(obj->xraudio_privacy_mode && (src == XRSR_SRC_MICROPHONE || src == XRSR_SRC_MICROPHONE_TAP)) {
+      XLOGD_INFO("src <%s> request denied due to privacy mode", xrsr_src_str(src));
+      return(false);
+   }
 
-   if(obj->xraudio_state == XRSR_XRAUDIO_STATE_DETECTING) {
-      xraudio_detect_stop(obj->xraudio_obj);
-      obj->xraudio_state = XRSR_XRAUDIO_STATE_OPENED;
+   if(src != XRSR_SRC_MICROPHONE_TAP) {
+      xrsr_xraudio_stream_t *stream = &obj->xraudio_streams[XRSR_SESSION_GROUP_DEFAULT];
+      if(stream->detecting) {
+         xraudio_detect_stop(obj->xraudio_obj);
+      }
    }
 
    xrsr_session_begin(src, true, xraudio_format, NULL, transcription_in, low_latency);
@@ -724,17 +771,18 @@ bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, 
 
 xrsr_src_t xrsr_xraudio_src_to_xrsr(xraudio_devices_input_t src) {
    switch(src) {
-      case XRAUDIO_DEVICE_INPUT_PTT:  return(XRSR_SRC_RCU_PTT);
-      case XRAUDIO_DEVICE_INPUT_FF:   return(XRSR_SRC_RCU_FF);
-      default:                        return(XRSR_SRC_MICROPHONE);
+      case XRAUDIO_DEVICE_INPUT_PTT:     return(XRSR_SRC_RCU_PTT);
+      case XRAUDIO_DEVICE_INPUT_FF:      return(XRSR_SRC_RCU_FF);
+      case XRAUDIO_DEVICE_INPUT_MIC_TAP: return(XRSR_SRC_MICROPHONE_TAP);
+      default:                           return(XRSR_SRC_MICROPHONE);
    }
    return(XRSR_SRC_INVALID);
 }
 
-void xrsr_audio_stats_clear(xrsr_xraudio_obj_t *obj) {
-   if(obj != NULL) {
-      obj->audio_stats_rxd = false;
-      memset(&obj->audio_stats, 0, sizeof(obj->audio_stats));
+void xrsr_audio_stats_clear(xrsr_xraudio_stream_t *stream) {
+   if(stream != NULL) {
+      stream->audio_stats_rxd = false;
+      memset(&stream->audio_stats, 0, sizeof(stream->audio_stats));
    }
 }
 
@@ -759,9 +807,14 @@ void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj) {
       if (XRAUDIO_DEVICE_INPUT_LOCAL_GET(obj->available_inputs[i]) != XRAUDIO_DEVICE_INPUT_NONE) {
          g_local_mic_low_power = XRAUDIO_DEVICE_INPUT_SINGLE;
          //This assumes that low power uses a single mic, which is the case and likely to remain so, but may need to be revisited later.
-         if(obj->available_inputs[i] != XRAUDIO_DEVICE_INPUT_SINGLE) {
-            //If we have only one mic, use it. If more than one use the multi for full power
-            g_local_mic_full_power = obj->available_inputs[i] & ~XRAUDIO_DEVICE_INPUT_SINGLE;
+         if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_QUAD) {
+            g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_QUAD;
+         } else if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_TRI) {
+            g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_TRI;
+         } else if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_SINGLE) {
+            g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_SINGLE;
+         } else {
+            g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
          }
          break;
       }

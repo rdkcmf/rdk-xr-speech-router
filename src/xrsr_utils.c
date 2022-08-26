@@ -44,10 +44,11 @@ const char *xrsr_invalid_return(int value) {
 
 const char *xrsr_src_str(xrsr_src_t src) {
    switch(src) {
-      case XRSR_SRC_RCU_PTT:    return("RCU_PTT");
-      case XRSR_SRC_RCU_FF:     return("RCU_FF");
-      case XRSR_SRC_MICROPHONE: return("MICROPHONE");
-      case XRSR_SRC_INVALID:    return("INVALID");
+      case XRSR_SRC_RCU_PTT:        return("RCU_PTT");
+      case XRSR_SRC_RCU_FF:         return("RCU_FF");
+      case XRSR_SRC_MICROPHONE:     return("MICROPHONE");
+      case XRSR_SRC_MICROPHONE_TAP: return("MICROPHONE_TAP");
+      case XRSR_SRC_INVALID:        return("INVALID");
    }
    return(xrsr_invalid_return(src));
 }
@@ -93,8 +94,6 @@ const char *xrsr_xraudio_state_str(xrsr_xraudio_state_t type) {
       case XRSR_XRAUDIO_STATE_REQUESTED: return("REQUESTED");
       case XRSR_XRAUDIO_STATE_GRANTED:   return("GRANTED");
       case XRSR_XRAUDIO_STATE_OPENED:    return("OPENED");
-      case XRSR_XRAUDIO_STATE_DETECTING: return("DETECTING");
-      case XRSR_XRAUDIO_STATE_STREAMING: return("STREAMING");
    }
    return(xrsr_invalid_return(type));
 }
@@ -192,6 +191,7 @@ const char *xrsr_audio_format_bitmask_str(uint32_t formats) {
 const char *xrsr_stream_from_str(xrsr_stream_from_t stream_from) {
    switch(stream_from) {
       case XRSR_STREAM_FROM_BEGINNING:     return("BEGINNING");
+      case XRSR_STREAM_FROM_LIVE:          return("LIVE");
       case XRSR_STREAM_FROM_KEYWORD_BEGIN: return("KEYWORD_BEGIN");
       case XRSR_STREAM_FROM_KEYWORD_END:   return("KEYWORD_END");
       case XRSR_STREAM_FROM_INVALID:       return("INVALID");

@@ -53,7 +53,7 @@
 #define XRSR_USER_AGENT_LEN_MAX           (256)   ///< Maximum length of the NULL-terminated user agent string.
 #define XRSR_SESSION_IP_LEN_MAX           (48)    ///< Maximum length of the NULL-terminated IP address string.
 
-#define XRSR_DST_QTY_MAX                  (2)     ///< Maximum quantity of destinations for a source
+#define XRSR_DST_QTY_MAX                  (1)     ///< Maximum quantity of destinations for a source
 
 #define XRSR_SESSION_BY_TEXT_MAX_LENGTH   (128)   ///< Maximum text string length for text-only sessions
 
@@ -72,7 +72,8 @@ typedef enum {
    XRSR_SRC_RCU_PTT         = 0, ///< A push to talk remote control
    XRSR_SRC_RCU_FF          = 1, ///< A far field remote control
    XRSR_SRC_MICROPHONE      = 2, ///< A local microphone
-   XRSR_SRC_INVALID         = 3  ///< An invalid source type
+   XRSR_SRC_MICROPHONE_TAP  = 3, ///< A local microphone tap
+   XRSR_SRC_INVALID         = 4  ///< An invalid source type
 } xrsr_src_t;
 
 /// @brief XRSR result types
@@ -166,9 +167,10 @@ typedef enum {
 /// @details The stream from enumeration indicates the point from which to begin streaming.
 typedef enum {
    XRSR_STREAM_FROM_BEGINNING     = 0, ///< Record from the beginning of incoming audio data
-   XRSR_STREAM_FROM_KEYWORD_BEGIN = 1, ///< Record from the keyword begin point
-   XRSR_STREAM_FROM_KEYWORD_END   = 2, ///< Record from the keyword end point
-   XRSR_STREAM_FROM_INVALID       = 3, ///< Invalid stream from type
+   XRSR_STREAM_FROM_LIVE          = 1, ///< Record from the live point of incoming audio data
+   XRSR_STREAM_FROM_KEYWORD_BEGIN = 2, ///< Record from the keyword begin point
+   XRSR_STREAM_FROM_KEYWORD_END   = 3, ///< Record from the keyword end point
+   XRSR_STREAM_FROM_INVALID       = 4, ///< Invalid stream from type
 } xrsr_stream_from_t;
 
 /// @brief XRSR stream until types
@@ -240,10 +242,13 @@ typedef struct {
 
 /// @brief XRSR session configuration input structure
 /// @details The session configuration input data structure provides detailed information to be used in a speech router session.
-typedef union {
+typedef struct {
+   xrsr_src_t                    src;  ///< source for the configuration
+   union {
    xrsr_session_config_in_http_t http; ///< HTTP session configuration
    xrsr_session_config_in_ws_t   ws;   ///< Websockets session configuration
    xrsr_session_config_in_sdt_t  sdt;  ///< SDT session configuration
+   };
 } xrsr_session_config_in_t;
 
 typedef void (*xrsr_callback_session_config_t)(const uuid_t uuid, xrsr_session_config_in_t *configuration);
@@ -583,8 +588,9 @@ bool xrsr_session_capture_stop(void);
 
 /// @brief XRSR session terminate
 /// @details Terminates the current session if it is still in progress.
+/// @param[in] src Source type
 /// @return The function has no return value.
-void xrsr_session_terminate(void);
+void xrsr_session_terminate(xrsr_src_t src);
 
 /// @brief Close the speech router interface
 /// @details Closes the interface and frees all associated resources.

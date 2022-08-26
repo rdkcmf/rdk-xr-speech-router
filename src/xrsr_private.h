@@ -60,8 +60,6 @@ typedef enum {
    XRSR_XRAUDIO_STATE_REQUESTED = 1,
    XRSR_XRAUDIO_STATE_GRANTED   = 2,
    XRSR_XRAUDIO_STATE_OPENED    = 3,
-   XRSR_XRAUDIO_STATE_DETECTING = 4,
-   XRSR_XRAUDIO_STATE_STREAMING = 5,
 } xrsr_xraudio_state_t;
 
 typedef enum {
@@ -76,6 +74,16 @@ typedef enum {
    XRSR_ADDRESS_FAMILY_IPV6    = 1,
    XRSR_ADDRESS_FAMILY_INVALID = 2
 } xrsr_address_family_t;
+
+typedef enum {
+   XRSR_SESSION_GROUP_DEFAULT = 0, // Session index for regular voice sessions (PTT, FFV)
+   #ifdef MICROPHONE_TAP_ENABLED
+   XRSR_SESSION_GROUP_MIC_TAP = 1, // Session index for microphone tap voice sessions
+   XRSR_SESSION_GROUP_QTY     = 2
+   #else
+   XRSR_SESSION_GROUP_QTY     = 1
+   #endif
+} xrsr_session_group_t;
 
 typedef struct {
    int         msgq_id;
@@ -184,6 +192,7 @@ typedef struct {
 
 typedef struct {
    xrsr_queue_msg_header_t header;
+   xrsr_src_t              src;
    xrsr_protocol_t         protocol;
    uuid_t                  uuid;
    const char *            sat_token;
@@ -197,6 +206,7 @@ typedef struct {
 typedef struct {
    xrsr_queue_msg_header_t header;
    sem_t *                 semaphore;
+   xrsr_src_t              src;
 } xrsr_queue_msg_session_terminate_t;
 
 typedef struct {
@@ -303,7 +313,7 @@ void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object);
 void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg, xrsr_src_t current_session_src);
 void xrsr_xraudio_keyword_detect_error(xrsr_xraudio_object_t object, xraudio_devices_input_t source);
 bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_id, xraudio_devices_input_t source, bool user_initiated, xraudio_input_format_t *format_decoded, xraudio_dst_pipe_t dsts[], uint16_t stream_time_min, uint32_t keyword_begin, uint32_t keyword_duration, uint32_t frame_duration, bool low_latency);
-bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats);
+bool xrsr_xraudio_stream_end(xrsr_xraudio_object_t object, xraudio_devices_input_t source, uint32_t dst_index, bool more_streams, bool detect_resume, xrsr_audio_stats_t *audio_stats);
 void xrsr_xraudio_stream_event_handler(xraudio_devices_input_t source, audio_in_callback_event_t event, xrsr_speech_event_t *speech_event);
 bool xrsr_xraudio_session_request(xrsr_xraudio_object_t object, xrsr_src_t src, xraudio_input_format_t xraudio_format, const char* transcription_in, bool low_latency);
 void xrsr_xraudio_session_capture_start(xrsr_xraudio_object_t object, xrsr_audio_container_t container, const char *file_path, bool raw_mic_enable);
@@ -314,6 +324,7 @@ bool xrsr_xraudio_privacy_mode_update(xrsr_xraudio_object_t object, bool enable)
 bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled);
 bool xrsr_xraudio_keyword_detect_sensitivity_limits_get(xrsr_xraudio_object_t object, xraudio_keyword_sensitivity_t *keyword_sensitivity_min, xraudio_keyword_sensitivity_t *keyword_sensitivity_max);
 xrsr_audio_format_t xrsr_xraudio_format_to_xrsr(xraudio_input_format_t format);
+xrsr_src_t xrsr_xraudio_src_to_xrsr(xraudio_devices_input_t src);
 
 void xrsr_session_begin(xrsr_src_t src, bool user_initiated, xraudio_input_format_t xraudio_format, xraudio_keyword_detector_result_t *detector_result, const char* transcription_in, bool low_latency);
 void xrsr_keyword_detect_error(xrsr_src_t src);

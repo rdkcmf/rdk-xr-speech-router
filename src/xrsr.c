@@ -114,6 +114,13 @@ typedef struct {
 #endif
 
 typedef struct {
+   bool                          first_stream_req;              // the first stream request sets up pipes for all requests
+   xrsr_src_t                    src;
+   xraudio_devices_input_t       xraudio_device_input;
+   int                           pipe_fds_rd[XRSR_DST_QTY_MAX]; // cache the read side of the pipes since the stream requests
+} xrsr_session_t;
+
+typedef struct {
    bool                          opened;
    xrsr_power_mode_t             power_mode;
    bool                          privacy_mode;
@@ -122,9 +129,7 @@ typedef struct {
    xrsr_route_int_t              routes[XRSR_SRC_INVALID];
    xrsr_xraudio_object_t         xrsr_xraudio_object;
    char *                        capture_dir_path;
-   xrsr_src_t                    src;
-   bool                          first_stream_req;              // the first stream request sets up pipes for all requests
-   int                           pipe_fds_rd[XRSR_DST_QTY_MAX]; // cache the read side of the pipes since the stream requests
+   xrsr_session_t                sessions[XRSR_SESSION_GROUP_QTY];
    #ifdef WS_ENABLED
    xrsr_ws_json_config_t         *ws_json_config;
    xrsr_ws_json_config_t          ws_json_config_fpm;
@@ -159,6 +164,11 @@ static void xrsr_msg_session_capture_start                  (const xrsr_thread_p
 static void xrsr_msg_session_capture_stop                   (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 static void xrsr_msg_thread_poll                            (const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg);
 
+static bool     xrsr_is_source_active(xrsr_src_t src);
+static bool     xrsr_is_group_active(uint32_t group);
+static uint32_t xrsr_source_to_group(xrsr_src_t src);
+static bool     xrsr_has_keyword_detector(xrsr_src_t src);
+
 static const xrsr_msg_handler_t g_xrsr_msg_handlers[XRSR_QUEUE_MSG_TYPE_INVALID] = {
    xrsr_msg_terminate,
    xrsr_msg_route_update,
@@ -187,7 +197,7 @@ static bool xrsr_threads_init(bool is_prod);
 static void xrsr_threads_term(void);
 static void *xrsr_thread_main(void *param);
 static void xrsr_route_free_all(void);
-static void xrsr_route_free(xrsr_src_t src);
+static void xrsr_route_free(xrsr_src_t src, bool closing);
 static void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_thread_state_t *state);
 
 static xrsr_audio_format_t xrsr_audio_format_get(uint32_t formats_supported_dst, xraudio_input_format_t format_src);
@@ -291,11 +301,15 @@ bool xrsr_open(const char *host_name, const xrsr_route_t routes[], const xrsr_ke
    // Create xraudio object
    xraudio_keyword_sensitivity_t sensitivity = (keyword_config == NULL) ? XRAUDIO_INPUT_DEFAULT_KEYWORD_SENSITIVITY : (xraudio_keyword_sensitivity_t)keyword_config->sensitivity;
 
-   g_xrsr.src                 = XRSR_SRC_INVALID;
-   g_xrsr.first_stream_req    = true;
+   for(uint32_t group = 0; group < XRSR_SESSION_GROUP_QTY; group++) {
+      xrsr_session_t *session = &g_xrsr.sessions[group];
+      session->first_stream_req     = true;
+      session->src                  = XRSR_SRC_INVALID;
+      session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_NONE;
 
-   for(index = 0; index < XRSR_DST_QTY_MAX; index++) {
-      g_xrsr.pipe_fds_rd[index] = -1;
+      for(index = 0; index < XRSR_DST_QTY_MAX; index++) {
+         session->pipe_fds_rd[index] = -1;
+      }
    }
 
    if(NULL == json_obj_vsdk) {
@@ -635,11 +649,11 @@ void xrsr_threads_term(void) {
 
 void xrsr_route_free_all(void) {
    for(uint32_t index = 0; index < XRSR_SRC_INVALID; index++) {
-      xrsr_route_free(index);
+      xrsr_route_free(index, true);
    }
 }
 
-void xrsr_route_free(xrsr_src_t src) {
+void xrsr_route_free(xrsr_src_t src, bool closing) {
    for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
       xrsr_dst_int_t *dst = &g_xrsr.routes[src].dsts[index];
 
@@ -656,7 +670,9 @@ void xrsr_route_free(xrsr_src_t src) {
             #ifdef WS_ENABLED
             case XRSR_PROTOCOL_WS:
             case XRSR_PROTOCOL_WSS: {
-               xrsr_ws_term(&dst->conn_state.ws);
+               if(!closing) {
+                  xrsr_ws_term(&dst->conn_state.ws);
+               }
                dst->initialized = false;
                break;
             }
@@ -685,7 +701,7 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
       return;
    }
 
-   xrsr_route_free(src);
+   xrsr_route_free(src, false);
 
    if(route->dst_qty == 0) { // Just deleting the route
       return;
@@ -715,7 +731,9 @@ void xrsr_route_update(const char *host_name, const xrsr_route_t *route, xrsr_th
          return;
       }
 
-      if(dst->stream_from == XRSR_STREAM_FROM_KEYWORD_BEGIN) {
+      if(dst->stream_from == XRSR_STREAM_FROM_LIVE) {
+         stream_from = XRAUDIO_INPUT_RECORD_FROM_LIVE;
+      } else if(dst->stream_from == XRSR_STREAM_FROM_KEYWORD_BEGIN) {
          stream_from = XRAUDIO_INPUT_RECORD_FROM_KEYWORD_BEGIN;
       } else if(dst->stream_from == XRSR_STREAM_FROM_KEYWORD_END) {
          stream_from = XRAUDIO_INPUT_RECORD_FROM_KEYWORD_END;
@@ -1302,11 +1320,12 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
       }
       XLOGD_INFO("%u: src <%s>", index, xrsr_src_str(src));
 
-      if((uint32_t)g_xrsr.src == src) { // Terminate active session on this source since it is being altered
-         XLOGD_INFO("terminate source <%s>", xrsr_src_str(g_xrsr.src));
+      if(xrsr_is_source_active(src)) { // Terminate active session on this source since it is being altered
+         XLOGD_INFO("terminate source <%s>", xrsr_src_str(src));
          xrsr_queue_msg_session_terminate_t terminate;
          terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
          terminate.semaphore   = NULL;
+         terminate.src         = src;
          xrsr_msg_session_terminate(params, state, &terminate);
       }
 
@@ -1329,7 +1348,7 @@ void xrsr_msg_route_update(const xrsr_thread_params_t *params, xrsr_thread_state
 }
 
 bool xrsr_session_request(xrsr_src_t src, xrsr_audio_format_t format, const char* transcription_in, bool low_latency) {
-   if(transcription_in == NULL && src != XRSR_SRC_MICROPHONE) {
+   if(transcription_in == NULL && src != XRSR_SRC_MICROPHONE && src != XRSR_SRC_MICROPHONE_TAP) {
       XLOGD_INFO("unsupported source <%s>", xrsr_src_str(src));
       return(false);
    }
@@ -1400,13 +1419,14 @@ bool xrsr_session_capture_stop(void) {
    return(true);
 }
 
-void xrsr_session_terminate() {
+void xrsr_session_terminate(xrsr_src_t src) {
    sem_t semaphore;
    sem_init(&semaphore, 0, 0);
 
    xrsr_queue_msg_session_terminate_t terminate;
    terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
    terminate.semaphore   = &semaphore;
+   terminate.src         = src;
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&terminate, sizeof(terminate));
 
    sem_wait(terminate.semaphore);
@@ -1465,12 +1485,18 @@ void xrsr_msg_power_mode_update(const xrsr_thread_params_t *params, xrsr_thread_
 
    XLOGD_INFO("power mode <%s>", xrsr_power_mode_str(power_mode_update->power_mode));
 
-   if(power_mode_update->power_mode != XRSR_POWER_MODE_FULL && (uint32_t)g_xrsr.src < XRSR_SRC_INVALID) { // Terminate active sessions
-      XLOGD_INFO("terminate source <%s>", xrsr_src_str(g_xrsr.src));
-      xrsr_queue_msg_session_terminate_t terminate;
-      terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
-      terminate.semaphore   = NULL;
-      xrsr_msg_session_terminate(params, state, &terminate);
+   if(power_mode_update->power_mode != XRSR_POWER_MODE_FULL) { // Terminate active sessions
+      for(uint32_t group = 0; group < XRSR_SESSION_GROUP_QTY; group++) {
+         xrsr_session_t *session = &g_xrsr.sessions[group];
+         if((uint32_t)session->src < XRSR_SRC_INVALID) {
+            XLOGD_INFO("terminate source <%s>", xrsr_src_str(session->src));
+            xrsr_queue_msg_session_terminate_t terminate;
+            terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+            terminate.semaphore   = NULL;
+            terminate.src         = session->src;
+            xrsr_msg_session_terminate(params, state, &terminate);
+         }
+      }
    }
    
    // Update the dst params for the new power mode
@@ -1532,13 +1558,25 @@ void xrsr_msg_xraudio_revoked(const xrsr_thread_params_t *params, xrsr_thread_st
 void xrsr_msg_xraudio_event(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_xraudio_in_event_t *event = (xrsr_queue_msg_xraudio_in_event_t *)msg;
 
-   if((uint32_t)g_xrsr.src >= XRSR_SRC_INVALID) {
-      XLOGD_ERROR("invalid source <%s>", xrsr_src_str(g_xrsr.src));
+   if(event == NULL) {
+      XLOGD_ERROR("invalid event");
+      return;
+   }
+
+   xrsr_src_t src = event->event.src;
+
+   if((uint32_t)src >= XRSR_SRC_INVALID) {
+      XLOGD_ERROR("invalid source <%s>", xrsr_src_str(src));
+      return;
+   }
+
+   if(!xrsr_is_source_active(src)) {
+      XLOGD_ERROR("inactive source <%s>", xrsr_src_str(src));
       return;
    }
 
    if(event->event.event != XRSR_EVENT_INVALID) {
-      uint32_t index_src = g_xrsr.src;
+      uint32_t index_src = src;
       for(uint32_t index_dst = 0; index_dst < XRSR_DST_QTY_MAX; index_dst++) {
          xrsr_dst_int_t *dst = &g_xrsr.routes[index_src].dsts[index_dst];
 
@@ -1576,12 +1614,38 @@ void xrsr_msg_xraudio_event(const xrsr_thread_params_t *params, xrsr_thread_stat
 
 void xrsr_msg_keyword_detected(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_keyword_detected_t *keyword_detected = (xrsr_queue_msg_keyword_detected_t *)msg;
-   xrsr_xraudio_keyword_detected(g_xrsr.xrsr_xraudio_object, keyword_detected, g_xrsr.src);
+
+   xrsr_src_t src = xrsr_xraudio_src_to_xrsr(keyword_detected->source);
+
+   xrsr_session_t *session = &g_xrsr.sessions[xrsr_source_to_group(src)];
+
+   xrsr_xraudio_keyword_detected(g_xrsr.xrsr_xraudio_object, keyword_detected, session->src);
 }
 
 void xrsr_msg_keyword_detect_error(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_keyword_detected_t *keyword_detected = (xrsr_queue_msg_keyword_detected_t *)msg;
+
    xrsr_xraudio_keyword_detect_error(g_xrsr.xrsr_xraudio_object, keyword_detected->source);
+
+   if(xrsr_is_source_active(keyword_detected->source)) { // Terminate active session on this source since an error occurred
+      XLOGD_INFO("terminate source <%s>", xrsr_src_str(keyword_detected->source));
+      xrsr_queue_msg_session_terminate_t terminate;
+      terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+      terminate.semaphore   = NULL;
+      terminate.src         = keyword_detected->source;
+      xrsr_msg_session_terminate(params, state, &terminate);
+   }
+
+   #ifdef MICROPHONE_TAP_ENABLED
+   if(keyword_detected->source == XRSR_SRC_MICROPHONE && xrsr_is_source_active(XRSR_SRC_MICROPHONE_TAP)) { // Terminate active session on this source since an error occurred
+      XLOGD_INFO("terminate source <%s>", xrsr_src_str(XRSR_SRC_MICROPHONE_TAP));
+      xrsr_queue_msg_session_terminate_t terminate;
+      terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+      terminate.semaphore   = NULL;
+      terminate.src         = XRSR_SRC_MICROPHONE_TAP;
+      xrsr_msg_session_terminate(params, state, &terminate);
+   }
+   #endif
 }
 
 void xrsr_msg_keyword_detect_sensitivity_limits_get(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
@@ -1604,30 +1668,35 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
       XLOGD_ERROR("invalid source <%s>", xrsr_src_str(begin->src));
       return;
    }
-   if(g_xrsr.src == begin->src && !begin->retry) { // Keyword was triggered again from same source while previous session is in progress
+   if(xrsr_is_source_active(begin->src) && !begin->retry) { // Keyword was triggered again from same source while previous session is in progress
       #ifdef XRSR_SESSION_RETRIGGER_ABORT
       // terminate current session and start a new one
-      XLOGD_INFO("aborting current session in progress on source <%s>", xrsr_src_str(g_xrsr.src));
+      XLOGD_INFO("aborting current session in progress on source <%s>", xrsr_src_str(begin->src));
       xrsr_queue_msg_session_terminate_t terminate;
       terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
       terminate.semaphore   = NULL;
+      terminate.src         = begin->src;
       xrsr_msg_session_terminate(params, state, &terminate);
 
       // TODO Need to set a flag to restart a new session immediately after the current session terminates
 
       #else // ignore the keyword detection and restart the detector
-      XLOGD_INFO("ignoring due to current session in progress on source <%s>", xrsr_src_str(g_xrsr.src));
+      XLOGD_INFO("ignoring due to current session in progress on source <%s>", xrsr_src_str(begin->src));
 
-      // Need to restart the keyword detector again
-      xrsr_xraudio_keyword_detect_restart(g_xrsr.xrsr_xraudio_object);
+      if(xrsr_has_keyword_detector(begin->src)) { // Need to restart the keyword detector again
+         xrsr_xraudio_keyword_detect_restart(g_xrsr.xrsr_xraudio_object);
+      }
       #endif
       return;
    }
-   if((uint32_t)g_xrsr.src < XRSR_SRC_INVALID && !begin->retry) {
-      XLOGD_ERROR("session in progress on source <%s>", xrsr_src_str(g_xrsr.src));
+   uint32_t group = xrsr_source_to_group(begin->src);
+   xrsr_session_t *session = &g_xrsr.sessions[group];
+
+   if(xrsr_is_group_active(group) && !begin->retry) {
+      XLOGD_ERROR("session in progress on source <%s>", xrsr_src_str(session->src));
       return;
    }
-   g_xrsr.src = begin->src;
+   session->src                  = begin->src;
 
    xrsr_keyword_detector_result_t *detector_result_ptr = NULL;
    xrsr_keyword_detector_result_t  detector_result;
@@ -1661,9 +1730,9 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
    const char *transcription_in = (begin->transcription_in[0] == '\0') ? NULL : begin->transcription_in;
 
    for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
-      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[dst_index];
+      xrsr_dst_int_t *dst = &g_xrsr.routes[session->src].dsts[dst_index];
 
-      if((uint32_t)g_xrsr.src >= XRSR_SRC_INVALID) { // Source can be released by index 0
+      if((uint32_t)session->src >= XRSR_SRC_INVALID) { // Source can be released by index 0
          break;
       }
       if(dst->handler == NULL) {
@@ -1693,7 +1762,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             session_config->user_initiated    = begin->user_initiated;
             session_config->cb_session_config = xrsr_callback_session_config_in_http;
 
-            XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
+            XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(session->src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
             // Set the handlers based on source
             http->handlers       = dst->handlers;
@@ -1715,7 +1784,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             // Call session begin handler
             if(!begin->retry && http->handlers.session_begin != NULL) {
                http->session_config_in.http.query_strs[0] = NULL;
-               (*http->handlers.session_begin)(http->handlers.data, http->uuid, g_xrsr.src, dst_index, detector_result_ptr, &http->session_config_out, &http->session_config_in, &begin->timestamp, http->transcription_ptr);
+               (*http->handlers.session_begin)(http->handlers.data, http->uuid, session->src, dst_index, detector_result_ptr, &http->session_config_out, &http->session_config_in, &begin->timestamp, http->transcription_ptr);
             }
 
             // Defer until the application sets the session config via the callback.  This must be done asynchronously to avoid deadlock situations.
@@ -1723,7 +1792,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
             if(begin->retry) { // connect again for retries
                bool deferred = ((dst->stream_time_min > 0) && (transcription_in == NULL)) ? true : false;
 
-               if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, http->xraudio_format, state->timer_obj, deferred, http->session_config_in.http.query_strs, transcription_in)) {
+               if(!xrsr_http_connect(http, &dst->url_parts, session->src, http->xraudio_format, state->timer_obj, deferred, http->session_config_in.http.query_strs, transcription_in)) {
                   XLOGD_ERROR("http connect failed");
                }
             }
@@ -1749,7 +1818,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                session_config->user_initiated    = begin->user_initiated;
                session_config->cb_session_config = xrsr_callback_session_config_in_ws;
 
-               XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
+               XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(session->src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
                // Set the handlers based on source
                ws->handlers       = dst->handlers;
@@ -1760,7 +1829,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                if(!begin->retry && ws->handlers.session_begin != NULL) { // Call session begin handler
                   ws->session_config_in.ws.query_strs[0] = NULL;
 
-                  (*ws->handlers.session_begin)(ws->handlers.data, ws->uuid, g_xrsr.src, dst_index, detector_result_ptr, &ws->session_config_out, &ws->session_config_in, &begin->timestamp, transcription_in);
+                  (*ws->handlers.session_begin)(ws->handlers.data, ws->uuid, session->src, dst_index, detector_result_ptr, &ws->session_config_out, &ws->session_config_in, &begin->timestamp, transcription_in);
                }
 
                // Defer audio stream and connect until the application sets the session config via the callback.  This must be done asynchronously to avoid deadlock situations.
@@ -1768,13 +1837,13 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                if(begin->retry) { // connect again for retries
                   bool deferred = ((dst->stream_time_min == 0) || transcription_in != NULL) ? false : !ws->stream_time_min_rxd;
 
-                  if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, ws->xraudio_format, begin->user_initiated, begin->retry, deferred, ws->session_config_in.ws.query_strs)) {
+                  if(!xrsr_ws_connect(ws, &dst->url_parts, session->src, ws->xraudio_format, begin->user_initiated, begin->retry, deferred, ws->session_config_in.ws.query_strs)) {
                      XLOGD_ERROR("ws connect");
                   }
                }
             } else if(xrsr_ws_is_established(ws)) {
                XLOGD_INFO("ws session continue");
-               if(!xrsr_ws_audio_stream(ws, g_xrsr.src)) {
+               if(!xrsr_ws_audio_stream(ws, session->src)) {
                   XLOGD_ERROR("ws audio stream");
                }
             } else {
@@ -1798,7 +1867,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                session_config->format            = xrsr_audio_format_get(dst->formats, begin->xraudio_format);
                session_config->cb_session_config = NULL;
 
-               XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(g_xrsr.src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
+               XLOGD_INFO("src <%s(%u)> prot <%s> uuid <%s> format <%s>", xrsr_src_str(session->src), dst_index, xrsr_protocol_str(prot), uuid_str, xrsr_audio_format_str(session_config->format));
 
                // Set the handlers based on source
                sdt->handlers    = dst->handlers;
@@ -1809,7 +1878,7 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                session_config->user_initiated = begin->user_initiated;
 
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(sdt->uuid, g_xrsr.src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, begin->low_latency, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(sdt->uuid, session->src, sdt->dst_index, begin->xraudio_format, begin->user_initiated, begin->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                   // perform clean up of the session
                   xrsr_sdt_speech_session_end(sdt, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -1820,12 +1889,12 @@ void xrsr_msg_session_begin(const xrsr_thread_params_t *params, xrsr_thread_stat
                
                bool deferred = (dst->stream_time_min == 0) ? false : !sdt->stream_time_min_rxd;
 
-               if(!xrsr_sdt_connect(sdt, &dst->url_parts, g_xrsr.src, begin->xraudio_format, begin->user_initiated, begin->retry, deferred, NULL, NULL)) {
+               if(!xrsr_sdt_connect(sdt, &dst->url_parts, session->src, begin->xraudio_format, begin->user_initiated, begin->retry, deferred, NULL, NULL)) {
                   XLOGD_ERROR("sdt connect");
                }
             } else if(xrsr_sdt_is_established(sdt)) {
                XLOGD_INFO("sdt session continue");
-               if(!xrsr_sdt_audio_stream(sdt, g_xrsr.src)) {
+               if(!xrsr_sdt_audio_stream(sdt, session->src)) {
                   XLOGD_ERROR("sdt audio stream");
                }
             } else {
@@ -1847,6 +1916,7 @@ void xrsr_callback_session_config_in_http(const uuid_t uuid, xrsr_session_config
    xrsr_queue_msg_session_config_in_t msg;
 
    msg.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN;
+   msg.src         = config_in->src;
    msg.protocol    = XRSR_PROTOCOL_HTTP;
    uuid_copy(msg.uuid, uuid);
 
@@ -1879,6 +1949,7 @@ void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_config_i
    xrsr_queue_msg_session_config_in_t msg;
 
    msg.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_CONFIG_IN;
+   msg.src         = config_in->src;
    msg.protocol    = XRSR_PROTOCOL_WS;
    uuid_copy(msg.uuid, uuid);
 
@@ -1913,11 +1984,18 @@ void xrsr_callback_session_config_in_ws(const uuid_t uuid, xrsr_session_config_i
 void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_session_config_in_t *config_in = (xrsr_queue_msg_session_config_in_t *)msg;
 
+   if((uint32_t)config_in->src >= XRSR_SRC_INVALID) {
+      XLOGD_ERROR("invalid source <%s>", xrsr_src_str(config_in->src));
+      return;
+   }
+
+   xrsr_session_t *session = &g_xrsr.sessions[xrsr_source_to_group(config_in->src)];
+
    bool found_session = false;
    for(uint32_t dst_index = 0; dst_index < XRSR_DST_QTY_MAX; dst_index++) {
-      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[dst_index];
+      xrsr_dst_int_t *dst = &g_xrsr.routes[session->src].dsts[dst_index];
 
-      if((uint32_t)g_xrsr.src >= XRSR_SRC_INVALID) { // Source can be released by index 0
+      if((uint32_t)session->src >= XRSR_SRC_INVALID) { // Source can be released by index 0
          break;
       }
       if(dst->handler == NULL) {
@@ -1982,9 +2060,9 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
                bool deferred = ((dst->stream_time_min > 0) && !http->is_session_by_text) ? true : false;
 
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(http->uuid, g_xrsr.src, dst_index, http->xraudio_format, http->session_config_out.user_initiated, http->low_latency, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(http->uuid, session->src, dst_index, http->xraudio_format, http->session_config_out.user_initiated, http->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
-               } else if(!xrsr_http_connect(http, &dst->url_parts, g_xrsr.src, http->xraudio_format, state->timer_obj, deferred, session_config_in_http->query_strs, http->transcription_ptr)) {
+               } else if(!xrsr_http_connect(http, &dst->url_parts, session->src, http->xraudio_format, state->timer_obj, deferred, session_config_in_http->query_strs, http->transcription_ptr)) {
                   XLOGD_ERROR("http connect failed");
                } else {
                   http->audio_pipe_fd_read = pipe_fd_read;
@@ -2053,7 +2131,7 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
 
                // start streaming audio to the pipe
                int pipe_fd_read = -1;
-               if(!xrsr_speech_stream_begin(ws->uuid, g_xrsr.src, ws->dst_index, ws->xraudio_format, ws->session_config_out.user_initiated, ws->low_latency, &pipe_fd_read)) {
+               if(!xrsr_speech_stream_begin(ws->uuid, session->src, ws->dst_index, ws->xraudio_format, ws->session_config_out.user_initiated, ws->low_latency, &pipe_fd_read)) {
                   XLOGD_ERROR("xrsr_speech_stream_begin failed");
                   // perform clean up of the session
                   xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
@@ -2064,7 +2142,7 @@ void xrsr_msg_session_config_in(const xrsr_thread_params_t *params, xrsr_thread_
 
                bool deferred = ((dst->stream_time_min == 0) || ws->is_session_by_text) ? false : !ws->stream_time_min_rxd;
 
-               if(!xrsr_ws_connect(ws, &dst->url_parts, g_xrsr.src, ws->xraudio_format, ws->session_config_out.user_initiated, false, deferred, ws->session_config_in.ws.query_strs)) {
+               if(!xrsr_ws_connect(ws, &dst->url_parts, session->src, ws->xraudio_format, ws->session_config_out.user_initiated, false, deferred, ws->session_config_in.ws.query_strs)) {
                   XLOGD_ERROR("ws connect");
                }
             }
@@ -2096,8 +2174,10 @@ void xrsr_session_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, u
       XLOGD_ERROR("invalid source <%s>", xrsr_src_str(src));
       return;
    }
-   if((uint32_t)g_xrsr.src != src) {
-      XLOGD_ERROR("source <%s> is not active source <%s>", xrsr_src_str(src), xrsr_src_str(g_xrsr.src));
+
+   xrsr_session_t *session = &g_xrsr.sessions[xrsr_source_to_group(src)];
+   if(!xrsr_is_source_active(src)) {
+      XLOGD_ERROR("source <%s> is not active source <%s>", xrsr_src_str(src), xrsr_src_str(session->src));
       return;
    }
    if(dst_index >= XRSR_DST_QTY_MAX || g_xrsr.routes[src].dsts[dst_index].handler == NULL) {
@@ -2117,7 +2197,7 @@ void xrsr_session_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, u
    // check state of each dst to determine if session if overall session is completed
    bool session_in_progress = false;
    for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
-      xrsr_dst_int_t *dst = &g_xrsr.routes[g_xrsr.src].dsts[index];
+      xrsr_dst_int_t *dst = &g_xrsr.routes[session->src].dsts[index];
       if(dst->handler == NULL) {
          continue;
       }
@@ -2159,22 +2239,33 @@ void xrsr_session_end(const uuid_t uuid, const char *uuid_str, xrsr_src_t src, u
    }
 
    if(!session_in_progress) {
-      g_xrsr.src = XRSR_SRC_INVALID;
+      session->src                  = XRSR_SRC_INVALID;
+      session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_NONE;
    }
 }
 
 void xrsr_msg_session_terminate(const xrsr_thread_params_t *params, xrsr_thread_state_t *state, void *msg) {
    xrsr_queue_msg_session_terminate_t *terminate = (xrsr_queue_msg_session_terminate_t *)msg;
 
-   if((uint32_t)g_xrsr.src >= XRSR_SRC_INVALID) {
-      XLOGD_ERROR("source is not active <%s>", xrsr_src_str(g_xrsr.src));
+   xrsr_src_t src = terminate->src;
+
+   if((uint32_t)src >= XRSR_SRC_INVALID) {
+      XLOGD_ERROR("source is invalid <%s>", xrsr_src_str(src));
       if(terminate->semaphore != NULL) {
          sem_post(terminate->semaphore);
       }
       return;
    }
 
-   uint32_t index_src = g_xrsr.src;
+   if(!xrsr_is_source_active(src)) {
+      XLOGD_ERROR("source is not active <%s>", xrsr_src_str(src));
+      if(terminate->semaphore != NULL) {
+         sem_post(terminate->semaphore);
+      }
+      return;
+   }
+
+   uint32_t index_src = src;
    for(uint32_t index_dst = 0; index_dst < XRSR_DST_QTY_MAX; index_dst++) {
       xrsr_dst_int_t *dst = &g_xrsr.routes[index_src].dsts[index_dst];
 
@@ -2430,11 +2521,12 @@ xrsr_result_t xrsr_conn_send(void *param, const uint8_t *buffer, uint32_t length
 }
 
 bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_index, xraudio_input_format_t native_format, bool user_initiated, bool low_latency, int *pipe_fd_read) {
-   if(!g_xrsr.first_stream_req) { // return the pipe for this destination
-      *pipe_fd_read = g_xrsr.pipe_fds_rd[dst_index];
+   xrsr_session_t *session = &g_xrsr.sessions[xrsr_source_to_group(src)];
+   if(!session->first_stream_req) { // return the pipe for this destination
+      *pipe_fd_read = session->pipe_fds_rd[dst_index];
       return(true);
    }
-   g_xrsr.first_stream_req = false;
+   session->first_stream_req = false;
 
    xraudio_dst_pipe_t dsts[XRSR_DST_QTY_MAX];
 
@@ -2443,7 +2535,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
       xrsr_dst_int_t *dst = &g_xrsr.routes[src].dsts[index];
 
       if(dst->handler == NULL) {
-         g_xrsr.pipe_fds_rd[index] = -1;
+         session->pipe_fds_rd[index] = -1;
          dsts[index].pipe          = -1;
          dsts[index].from          = XRAUDIO_INPUT_RECORD_FROM_INVALID;
          dsts[index].offset        = 0;
@@ -2457,7 +2549,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
       if(pipe(pipe_fds) == -1) {
          int errsv = errno;
          XLOGD_ERROR("unable to create pipe <%s>", strerror(errsv));
-         g_xrsr.first_stream_req = true;
+         session->first_stream_req = true;
          return(false);
       }
 
@@ -2466,28 +2558,29 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
       uint32_t size     = (XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE * XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE * XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY * duration) / 1000;
 
       int rc = fcntl(pipe_fds[1], F_SETPIPE_SZ, size);
-      if(rc != size) {
+      if(rc < size) { // emit a warning if the kernel returns a pipe size smaller than we requested
          XLOGD_WARN("set pipe size failed exp <%u> rxd <%d>", size, rc);
       } else {
-         XLOGD_INFO("set pipe size %u ms (%u bytes)", duration, size);
+         duration = (rc * 1000) / (XRAUDIO_INPUT_DEFAULT_SAMPLE_RATE * XRAUDIO_INPUT_DEFAULT_SAMPLE_SIZE * XRAUDIO_INPUT_DEFAULT_CHANNEL_QTY);
+         XLOGD_INFO("src <%s> dst index <%u> pipe size %u ms (%u KB)", xrsr_src_str(src), index, duration, rc / 1024);
       }
 
-      g_xrsr.pipe_fds_rd[index] = pipe_fds[0];
-      dsts[index].pipe          = pipe_fds[1];
-      dsts[index].from          = dst->stream_from;
-      dsts[index].offset        = dst->stream_offset;
-      dsts[index].until         = dst->stream_until;
+      session->pipe_fds_rd[index] = pipe_fds[0];
+      dsts[index].pipe            = pipe_fds[1];
+      dsts[index].from            = dst->stream_from;
+      dsts[index].offset          = dst->stream_offset;
+      dsts[index].until           = dst->stream_until;
    }
 
-   xraudio_devices_input_t source;
-
    switch(src) {
-      case XRSR_SRC_RCU_PTT:    { source = XRAUDIO_DEVICE_INPUT_PTT;    break; }
-      case XRSR_SRC_RCU_FF:     { source = XRAUDIO_DEVICE_INPUT_FF;     break; }
-      case XRSR_SRC_MICROPHONE: { source = (native_format.encoding == XRAUDIO_ENCODING_PCM_RAW || native_format.channel_qty > 1) ? XRAUDIO_DEVICE_INPUT_TRI : XRAUDIO_DEVICE_INPUT_SINGLE; break; }
+      case XRSR_SRC_RCU_PTT:        { session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_PTT;     break; }
+      case XRSR_SRC_RCU_FF:         { session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_FF;      break; }
+      case XRSR_SRC_MICROPHONE:     { session->xraudio_device_input = (native_format.encoding == XRAUDIO_ENCODING_PCM_RAW || native_format.channel_qty > 1) ? XRAUDIO_DEVICE_INPUT_TRI : XRAUDIO_DEVICE_INPUT_SINGLE; break; }
+      case XRSR_SRC_MICROPHONE_TAP: { session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_MIC_TAP; break; }
       default: {
          XLOGD_ERROR("invalid src <%s>", xrsr_src_str(src));
-         g_xrsr.first_stream_req = true;
+         session->first_stream_req     = true;
+         session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_NONE;
          return(false);
       }
    }
@@ -2514,7 +2607,7 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    uuid_unparse_lower(uuid, uuid_str);
 
    uint32_t frame_duration;
-   if (XRAUDIO_DEVICE_INPUT_EXTERNAL_GET(source)) {
+   if (XRAUDIO_DEVICE_INPUT_EXTERNAL_GET(session->xraudio_device_input)) {
       if (native_format.encoding == XRAUDIO_ENCODING_ADPCM_SKY) {
          frame_duration = 1000 * 1000 * XRAUDIO_INPUT_ADPCM_SKY_FRAME_SAMPLE_QTY / xraudio_format.sample_rate;
       } else {
@@ -2525,21 +2618,22 @@ bool xrsr_speech_stream_begin(const uuid_t uuid, xrsr_src_t src, uint32_t dst_in
    }
    
    // Make a single call to start streaming to all destinations
-   if(!xrsr_xraudio_stream_begin(g_xrsr.xrsr_xraudio_object, uuid_str, source, user_initiated, &xraudio_format, dsts, dst->stream_time_min, user_initiated ? 0 : dst->keyword_begin, user_initiated ? 0 : dst->keyword_duration, frame_duration, low_latency)) {
+   if(!xrsr_xraudio_stream_begin(g_xrsr.xrsr_xraudio_object, uuid_str, session->xraudio_device_input, user_initiated, &xraudio_format, dsts, dst->stream_time_min, user_initiated ? 0 : dst->keyword_begin, user_initiated ? 0 : dst->keyword_duration, frame_duration, low_latency)) {
       for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
          if(dsts[index].pipe >= 0) {
             close(dsts[index].pipe);
          }
-         if(g_xrsr.pipe_fds_rd[index] >= 0) {
-            close(g_xrsr.pipe_fds_rd[index]);
-            g_xrsr.pipe_fds_rd[index] = -1;
+         if(session->pipe_fds_rd[index] >= 0) {
+            close(session->pipe_fds_rd[index]);
+            session->pipe_fds_rd[index] = -1;
          }
       }
-      g_xrsr.first_stream_req = true;
+      session->first_stream_req     = true;
+      session->xraudio_device_input = XRAUDIO_DEVICE_INPUT_NONE;
       XLOGD_ERROR("xrsr_xraudio_stream_begin failed");
       return(false);
    }
-   *pipe_fd_read = g_xrsr.pipe_fds_rd[dst_index];
+   *pipe_fd_read = session->pipe_fds_rd[dst_index];
 
    return(true);
 }
@@ -2567,23 +2661,25 @@ bool xrsr_speech_stream_end(const uuid_t uuid, xrsr_src_t src, uint32_t dst_inde
       return(false);
    }
 
+   xrsr_session_t *session = &g_xrsr.sessions[xrsr_source_to_group(src)];
+
    // Need to know when all streams have ended to call xraudio stream end?
-   g_xrsr.pipe_fds_rd[dst_index] = -1;
+   session->pipe_fds_rd[dst_index] = -1;
 
    bool more_streams = false;
    for(uint32_t index = 0; index < XRSR_DST_QTY_MAX; index++) {
-      if(g_xrsr.pipe_fds_rd[index] >= 0) {
+      if(session->pipe_fds_rd[index] >= 0) {
          more_streams = true;
       }
    }
 
-   if(!xrsr_xraudio_stream_end(g_xrsr.xrsr_xraudio_object, dst_index, more_streams, detect_resume, audio_stats)) {
+   if(!xrsr_xraudio_stream_end(g_xrsr.xrsr_xraudio_object, session->xraudio_device_input, dst_index, more_streams, detect_resume, audio_stats)) {
       XLOGD_ERROR("xrsr_xraudio_stream_end failed");
       result = false;
    }
 
    if(!more_streams) {
-      g_xrsr.first_stream_req = true;
+      session->first_stream_req = true;
    }
 
    xrsr_dst_int_t *dst = &g_xrsr.routes[src].dsts[dst_index];
@@ -2638,3 +2734,38 @@ xrsr_audio_format_t xrsr_audio_format_get(uint32_t formats_supported_dst, xraudi
    return(ret);
 }
 
+bool xrsr_is_source_active(xrsr_src_t src) {
+   for(uint32_t group = 0; group < XRSR_SESSION_GROUP_QTY; group++) {
+      xrsr_session_t *session = &g_xrsr.sessions[group];
+      if(session->src == src) {
+         return(true);
+      }
+   }
+   return(false);
+}
+
+bool xrsr_is_group_active(uint32_t group) {
+   xrsr_session_t *session = &g_xrsr.sessions[group];
+   if((uint32_t)session->src < XRSR_SRC_INVALID) {
+      return(true);
+   }
+   return(false);
+}
+
+uint32_t xrsr_source_to_group(xrsr_src_t src) {
+   #ifdef MICROPHONE_TAP_ENABLED
+   if(src == XRSR_SRC_MICROPHONE_TAP) {
+      return(1);
+   }
+   #endif
+   return(0);
+}
+
+bool xrsr_has_keyword_detector(xrsr_src_t src) {
+   #ifdef MICROPHONE_TAP_ENABLED
+   if(src == XRSR_SRC_MICROPHONE_TAP) {
+      return(false);
+   }
+   #endif
+   return(true);
+}

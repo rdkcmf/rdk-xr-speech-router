@@ -186,7 +186,10 @@ void xrsr_ws_nopoll_log(noPollCtx * ctx, noPollDebugLevel level, const char * lo
 
 void xrsr_ws_term(xrsr_state_ws_t *ws) {
    XLOGD_INFO("");
-   if(ws == NULL || ws->obj_ctx == NULL) {
+   if(ws == NULL) {
+      XLOGD_ERROR("invalid params");
+      return;
+   } else if(ws->obj_ctx == NULL) {
       XLOGD_ERROR("NULL context");
       return;
    }
@@ -210,6 +213,7 @@ void xrsr_ws_host_name_set(xrsr_state_ws_t *ws, const char *host_name) {
 
 void xrsr_ws_fd_set(xrsr_state_ws_t *ws, int *nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds) {
    if(xrsr_ws_is_established(ws) && ws->socket >= 0) {
+      //XLOGD_INFO("src <%s> socket <%d> audio pipe <%d> write pending bytes <%d>", xrsr_src_str(ws->audio_src), ws->socket, ws->audio_pipe_fd_read, ws->write_pending_bytes);
       // Always check for incoming messages if ws is established
       FD_SET(ws->socket, readfds);
       if(ws->socket >= *nfds) {
@@ -234,7 +238,7 @@ void xrsr_ws_fd_set(xrsr_state_ws_t *ws, int *nfds, fd_set *readfds, fd_set *wri
 void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, fd_set *exceptfds) {
    // First, let's check if we have received a message over the websocket
    if(ws->socket >= 0 && FD_ISSET(ws->socket, readfds)) {
-      XLOGD_INFO("data available for read");
+      XLOGD_INFO("src <%s> data available for read", xrsr_src_str(ws->audio_src));
       xrsr_ws_read_pending(ws);
    }
 
@@ -244,7 +248,7 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
       if(ws->write_pending_bytes) {
          int bytes = nopoll_conn_pending_write_bytes(ws->obj_conn);
          if(bytes != (nopoll_conn_complete_pending_write(ws->obj_conn))) {
-            XLOGD_WARN("still waiting to write pending bytes...");
+            XLOGD_WARN("src <%s> still waiting to write pending bytes...", xrsr_src_str(ws->audio_src));
             ws->write_pending_retries++;
             if(ws->write_pending_retries > XRSR_WS_WRITE_PENDING_RETRY_MAX) {
                xrsr_ws_event(ws, SM_EVENT_WS_ERROR, false);
@@ -252,7 +256,7 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
             // No point in continuing, as we haven't sent the pending data yet.
             return;
          }
-         XLOGD_INFO("pending bytes written successfully");
+         XLOGD_INFO("src <%s> pending bytes written successfully", xrsr_src_str(ws->audio_src));
          ws->write_pending_bytes   = false;
          ws->write_pending_retries = 0;
       }
@@ -265,19 +269,19 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
 
          if(xrsr_ws_get_msg_out(ws, &buf, &len)) {
             if(buf) {
-               XLOGD_INFO("sending outgoing message");
+               XLOGD_INFO("src <%s> sending outgoing message", xrsr_src_str(ws->audio_src));
                bytes = nopoll_conn_send_text(ws->obj_conn, (const char *)buf, (long)len);
                // NoPoll now has the data copied into an internal buffer
                free(buf);
                buf = NULL;
                if(bytes == 0 || bytes == -1) {
-                  XLOGD_ERROR("failed to write to websocket");
+                  XLOGD_ERROR("src <%s> failed to write to websocket", xrsr_src_str(ws->audio_src));
                   xrsr_ws_event(ws, SM_EVENT_WS_ERROR, false);
                } else if(bytes == -2 || bytes != len) {
                   if(bytes == -2) {
-                     XLOGD_WARN("websocket would block sending outgoing message");
+                     XLOGD_WARN("src <%s> websocket would block sending outgoing message", xrsr_src_str(ws->audio_src));
                   } else {
-                     XLOGD_WARN("partial message sent");
+                     XLOGD_WARN("src <%s> partial message sent", xrsr_src_str(ws->audio_src));
                   }
                   ws->write_pending_bytes = true;
                   // No point in continuing, as we haven't sent this message yet.
@@ -295,33 +299,33 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
       if(rc < 0) {
          int errsv = errno;
          if(errsv == EAGAIN || errsv == EWOULDBLOCK) {
-            XLOGD_INFO("read would block");
+            XLOGD_INFO("src <%s> read would block", xrsr_src_str(ws->audio_src));
             xrsr_ws_event(ws, SM_EVENT_AUDIO_ERROR, false);
          } else {
-            XLOGD_ERROR("pipe read error <%s>", strerror(errsv));
+            XLOGD_ERROR("src <%s> pipe read error <%s>", xrsr_src_str(ws->audio_src), strerror(errsv));
             xrsr_ws_event(ws, SM_EVENT_AUDIO_ERROR, false);
          }
       } else if(rc == 0) { // EOF
-         XLOGD_INFO("pipe read EOF");
+         XLOGD_INFO("src <%s> pipe read EOF", xrsr_src_str(ws->audio_src));
          xrsr_ws_event(ws, SM_EVENT_EOS_PIPE, false);
       } else {
-         XLOGD_INFO("pipe read <%d>", rc);
+         XLOGD_DEBUG("src <%s> pipe read <%d>", xrsr_src_str(ws->audio_src), rc);
          uint32_t bytes_read = (uint32_t)rc;
 
          rc = nopoll_conn_send_binary(ws->obj_conn, (const char *)ws->buffer, (long)bytes_read);
          if(rc == -2) { // NOPOLL_EWOULDBLOCK
-            XLOGD_ERROR("websocket would block");
+            XLOGD_WARN("src <%s> websocket would block", xrsr_src_str(ws->audio_src));
             // Set flag to wait for socket write ready
             ws->write_pending_bytes = true;
          } else if(rc == 0) { // no bytes sent (see errno indication)
             int errsv = errno;
-            XLOGD_ERROR("websocket failure <%s>", strerror(errsv));
+            XLOGD_ERROR("src <%s> websocket failure <%s>", xrsr_src_str(ws->audio_src), strerror(errsv));
             xrsr_ws_event(ws, SM_EVENT_WS_ERROR, false);
          } else if(rc < 0) { // failure found
-            XLOGD_ERROR("websocket failure <%d>", rc);
+            XLOGD_ERROR("src <%s> websocket failure <%d>", xrsr_src_str(ws->audio_src), rc);
             xrsr_ws_event(ws, SM_EVENT_WS_ERROR, false);
          } else if(rc != bytes_read) { // partial bytes sent
-            XLOGD_WARN("websocket size mismatch req <%u> sent <%d>", bytes_read, rc);
+            XLOGD_WARN("src <%s> websocket size mismatch req <%u> sent <%d>", xrsr_src_str(ws->audio_src), bytes_read, rc);
             // Set flag to wait for socket write ready
             ws->write_pending_bytes = true;
             ws->audio_txd_bytes    += (uint32_t) rc;
@@ -330,7 +334,7 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
          }
          if(!ws->audio_kwd_notified && (ws->audio_txd_bytes >= ws->audio_kwd_bytes)) {
             if(!xrsr_speech_stream_kwd(ws->uuid,  ws->audio_src, ws->dst_index)) {
-               XLOGD_ERROR("xrsr_speech_stream_kwd failed");
+               XLOGD_ERROR("src <%s> xrsr_speech_stream_kwd failed", xrsr_src_str(ws->audio_src));
             }
             ws->audio_kwd_notified = true;
          }
@@ -339,8 +343,8 @@ void xrsr_ws_handle_fds(xrsr_state_ws_t *ws, fd_set *readfds, fd_set *writefds, 
 }
 
 void xrsr_ws_process_timeout(void *data) {
-   XLOGD_INFO("");
    xrsr_state_ws_t *ws = (xrsr_state_ws_t *)data;
+   XLOGD_INFO("src <%s>", xrsr_src_str(ws->audio_src));
    xrsr_ws_event(ws, SM_EVENT_TIMEOUT, false);
 }
 
@@ -381,7 +385,7 @@ bool xrsr_ws_connect(xrsr_state_ws_t *ws, xrsr_url_parts_t *url_parts, xrsr_src_
       } while(*query_strs != NULL);
    }
 
-   XLOGD_INFO("local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> family <%s> retry period <%u> ms", ws->local_host_name, url_parts->host, url_parts->port_str, xrsr_mask_pii() ? "***" : ws->url, (deferred) ? "YES" : "NO", xrsr_address_family_str(url_parts->family), ws->timeout_session);
+   XLOGD_INFO("src <%s> local host <%s> remote host <%s> port <%s> url <%s> deferred <%s> family <%s> retry period <%u> ms", xrsr_src_str(ws->audio_src), ws->local_host_name, url_parts->host, url_parts->port_str, xrsr_mask_pii() ? "***" : ws->url, (deferred) ? "YES" : "NO", xrsr_address_family_str(url_parts->family), ws->timeout_session);
 
    nopoll_conn_connect_timeout(ws->obj_ctx, ws->timeout_connect * 1000);  // wait no more than N milliseconds
 
@@ -414,7 +418,7 @@ bool xrsr_ws_connect_new(xrsr_state_ws_t *ws) {
 
    snprintf(origin, sizeof(origin), origin_fmt, url_parts->host, url_parts->port_str);
 
-   XLOGD_INFO("attempt <%u>", ws->retry_cnt);
+   XLOGD_INFO("src <%s> attempt <%u>", xrsr_src_str(ws->audio_src), ws->retry_cnt);
 
    if(ws->prot == XRSR_PROTOCOL_WSS) {
       const char *ptr_path = strchrnul(&ws->url[6], '/'); // skip over wss:// and locate next /
@@ -425,7 +429,7 @@ bool xrsr_ws_connect_new(xrsr_state_ws_t *ws) {
    }
    
    if(ws->obj_conn == NULL) {
-      XLOGD_ERROR("conn new");
+      XLOGD_ERROR("src <%s> conn new", xrsr_src_str(ws->audio_src));
       return(false);
    }
    nopoll_conn_set_on_close(ws->obj_conn, xrsr_ws_on_close, ws);
@@ -453,7 +457,7 @@ bool xrsr_ws_conn_is_ready(xrsr_state_ws_t *ws) {
       XLOGD_ERROR("NULL xrsr_state_ws_t");
       return(false);
    } else if(ws->obj_conn == NULL) {
-      XLOGD_ERROR("NULL param");
+      XLOGD_ERROR("src <%s> NULL param", xrsr_src_str(ws->audio_src));
       return(false);
    }
    if(nopoll_true != nopoll_conn_is_ready(ws->obj_conn)) {
@@ -463,7 +467,7 @@ bool xrsr_ws_conn_is_ready(xrsr_state_ws_t *ws) {
    ws->socket          = nopoll_conn_socket(ws->obj_conn);
    
    if(nopoll_true != nopoll_conn_set_sock_block(ws->socket, nopoll_false)) {
-      XLOGD_WARN("unable to set non-blocking");
+      XLOGD_WARN("src <%s> unable to set non-blocking", xrsr_src_str(ws->audio_src));
    }
    return(true);
 }
@@ -474,7 +478,7 @@ void xrsr_ws_terminate(xrsr_state_ws_t *ws) {
       XLOGD_ERROR("NULL xrsr_state_ws_t");
       return;
    } else if(ws->obj_ctx == NULL) {
-      XLOGD_ERROR("NULL context");
+      XLOGD_ERROR("src <%s> NULL context", xrsr_src_str(ws->audio_src));
       return;
    } 
 
@@ -487,7 +491,7 @@ bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src) {
       XLOGD_ERROR("NULL xrsr_state_ws_t");
       return(false);
    } else if(ws->obj_ctx == NULL) {
-      XLOGD_ERROR("NULL context");
+      XLOGD_ERROR("src <%s> NULL context", xrsr_src_str(ws->audio_src));
       return(false);
    }
 
@@ -496,7 +500,7 @@ bool xrsr_ws_audio_stream(xrsr_state_ws_t *ws, xrsr_src_t src) {
    // Continue streaming audio to the websocket
    int pipe_fd_read = -1;
    if(!xrsr_speech_stream_begin(ws->uuid, ws->audio_src, ws->dst_index, ws->xraudio_format, ws->user_initiated, ws->low_latency, &pipe_fd_read)) {
-      XLOGD_ERROR("xrsr_speech_stream_begin failed");
+      XLOGD_ERROR("src <%s> xrsr_speech_stream_begin failed", xrsr_src_str(ws->audio_src));
       // perform clean up of the session
       xrsr_ws_speech_session_end(ws, XRSR_SESSION_END_REASON_ERROR_AUDIO_BEGIN);
       return(false);
@@ -520,7 +524,7 @@ int xrsr_ws_read_pending(xrsr_state_ws_t *ws) {
    noPollMsg *msg = nopoll_conn_get_msg(ws->obj_conn);
 
    if(msg == NULL) {
-      XLOGD_DEBUG("nopoll_conn_get_msg returned NULL");
+      XLOGD_DEBUG("src <%s> nopoll_conn_get_msg returned NULL", xrsr_src_str(ws->audio_src));
    } else {
       xrsr_ws_on_msg(ws, ws->obj_conn, msg);
    }
@@ -533,18 +537,18 @@ int xrsr_ws_send_binary(xrsr_state_ws_t *ws, const uint8_t *buffer, uint32_t len
       XLOGD_ERROR("NULL xrsr_state_ws_t");
       return(-1);
    } else if(!xrsr_ws_is_established(ws)) {
-      XLOGD_ERROR("invalid state");
+      XLOGD_ERROR("src <%s> invalid state", xrsr_src_str(ws->audio_src));
       return(-1);
    }
-   XLOGD_DEBUG("length <%u>", length);
+   XLOGD_DEBUG("src <%s> length <%u>", xrsr_src_str(ws->audio_src), length);
    errno = 0;
    int rc = nopoll_conn_send_binary(ws->obj_conn, (const char *)buffer, (long)length);
    if(rc <= 0) { // failure found
       int errsv = errno;
-      XLOGD_ERROR("websocket failure <%d>, errno (%d) <%s>, setting ws->socket = -1;", rc, errsv, strerror(errsv));
+      XLOGD_ERROR("src <%s> websocket failure <%d>, errno (%d) <%s>, setting ws->socket = -1;", xrsr_src_str(ws->audio_src), rc, errsv, strerror(errsv));
       ws->socket = -1;
    } else if(rc != length) { // partial bytes sent
-      XLOGD_ERROR("websocket size mismatch req <%u> sent <%d>", length, rc);
+      XLOGD_ERROR("src <%s> websocket size mismatch req <%u> sent <%d>", xrsr_src_str(ws->audio_src), length, rc);
    }
    return rc;
 }
@@ -554,29 +558,29 @@ int xrsr_ws_send_text(xrsr_state_ws_t *ws, const uint8_t *buffer, uint32_t lengt
       XLOGD_ERROR("NULL xrsr_state_ws_t");
       return(-1);
    } else if(!xrsr_ws_is_established(ws)) {
-      XLOGD_ERROR("invalid state");
+      XLOGD_ERROR("src <%s> invalid state", xrsr_src_str(ws->audio_src));
       return(-1);
    }
-   XLOGD_DEBUG("length <%u>", length);
+   XLOGD_DEBUG("src <%s> length <%u>", xrsr_src_str(ws->audio_src), length);
    errno = 0;
    bool ret = xrsr_ws_queue_msg_out(ws, (const char *)buffer, length);
    return (ret ? 1 : 0);
 }
 
 void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
-   XLOGD_INFO("");
+   XLOGD_INFO("src <%s>", xrsr_src_str(ws->audio_src));
    xrsr_recv_msg_t msg_type      = XRSR_RECV_MSG_INVALID;
    xrsr_recv_event_t recv_event  = XRSR_RECV_EVENT_NONE;
 
    // Check if we are building up a message
    if(ws->pending_msg != NULL && nopoll_msg_is_final(msg) == nopoll_true) {
-      XLOGD_INFO("Final Fragment received");
+      XLOGD_INFO("src <%s> Final Fragment received", xrsr_src_str(ws->audio_src));
       ws->pending_msg = nopoll_msg_join(ws->pending_msg, msg);
       nopoll_msg_unref(msg);
       msg = ws->pending_msg;
       ws->pending_msg = NULL;
    } else if(nopoll_msg_is_fragment(msg) == nopoll_true) {
-      XLOGD_INFO("Fragment received");
+      XLOGD_INFO("src <%s> Fragment received", xrsr_src_str(ws->audio_src));
       ws->pending_msg = nopoll_msg_join(ws->pending_msg, msg);
       nopoll_msg_unref(msg);
       return;
@@ -593,7 +597,7 @@ void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
          break;
       }
       default: {
-         XLOGD_ERROR("invalid opcode <%s>", xrsr_ws_opcode_str(opcode));
+         XLOGD_ERROR("src <%s> invalid opcode <%s>", xrsr_src_str(ws->audio_src), xrsr_ws_opcode_str(opcode));
          break;
       }
    }
@@ -607,7 +611,7 @@ void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
 
    // Call recv msg handler
    if(ws->handlers.recv_msg == NULL) {
-      XLOGD_ERROR("recv msg handler not available");
+      XLOGD_ERROR("src <%s> recv msg handler not available", xrsr_src_str(ws->audio_src));
    } else {
       if((*ws->handlers.recv_msg)(ws->handlers.data, msg_type, payload, size, &recv_event)) {
          // Close the connection
@@ -619,14 +623,14 @@ void xrsr_ws_on_msg(xrsr_state_ws_t *ws, noPollConn *conn, noPollMsg *msg) {
   if((unsigned int)recv_event < XRSR_RECV_EVENT_NONE) {
      ws->stream_end_reason  = (recv_event == XRSR_RECV_EVENT_EOS_SERVER ? XRSR_STREAM_END_REASON_AUDIO_EOF : XRSR_STREAM_END_REASON_DISCONNECT_REMOTE);
      ws->session_end_reason = (recv_event == XRSR_RECV_EVENT_EOS_SERVER ? XRSR_SESSION_END_REASON_EOS      : XRSR_SESSION_END_REASON_ERROR_WS_SEND);
-     XLOGD_INFO("recv_event %s", xrsr_recv_event_str(recv_event));
+     XLOGD_INFO("src <%s> recv_event %s", xrsr_src_str(ws->audio_src), xrsr_recv_event_str(recv_event));
      xrsr_ws_event(ws, SM_EVENT_EOS_PIPE, true);
   }
 }
 
 void xrsr_ws_on_close(noPollCtx *ctx, noPollConn *conn, noPollPtr user_data) {
    xrsr_state_ws_t *ws = (xrsr_state_ws_t *)user_data;
-   XLOGD_INFO("");
+   XLOGD_INFO("src <%s>", xrsr_src_str(ws->audio_src));
 
    ws->on_close = true;
    if(ws->pending_msg) { // This shouldn't ever happen, but for sanity.
@@ -639,7 +643,7 @@ void xrsr_ws_on_close(noPollCtx *ctx, noPollConn *conn, noPollPtr user_data) {
 }
 
 void xrsr_ws_speech_stream_end(xrsr_state_ws_t *ws, xrsr_stream_end_reason_t reason, bool detect_resume) {
-   XLOGD_INFO("fd <%d> reason <%s>", ws->audio_pipe_fd_read, xrsr_stream_end_reason_str(reason));
+   XLOGD_INFO("src <%s> fd <%d> reason <%s>", xrsr_src_str(ws->audio_src), ws->audio_pipe_fd_read, xrsr_stream_end_reason_str(reason));
 
    xrsr_speech_stream_end(ws->uuid, ws->audio_src, ws->dst_index, reason, detect_resume, &ws->audio_stats);
 
@@ -650,7 +654,7 @@ void xrsr_ws_speech_stream_end(xrsr_state_ws_t *ws, xrsr_stream_end_reason_t rea
 }
 
 void xrsr_ws_speech_session_end(xrsr_state_ws_t *ws, xrsr_session_end_reason_t reason) {
-   XLOGD_INFO("fd <%d> reason <%s> close code <%d>", ws->audio_pipe_fd_read, xrsr_session_end_reason_str(reason), ws->close_status);
+   XLOGD_INFO("src <%s> fd <%d> reason <%s> close code <%d>", xrsr_src_str(ws->audio_src), ws->audio_pipe_fd_read, xrsr_session_end_reason_str(reason), ws->close_status);
 
    ws->stats.reason = reason;
 
@@ -694,7 +698,7 @@ void xrsr_ws_handle_speech_event(xrsr_state_ws_t *ws, xrsr_speech_event_t *event
          break;
       }
       default: {
-         XLOGD_WARN("unhandled speech event <%s>", xrsr_event_str(event->event));
+         XLOGD_WARN("src <%s> unhandled speech event <%s>", xrsr_src_str(ws->audio_src), xrsr_event_str(event->event));
          break;
       }
    }
@@ -707,7 +711,7 @@ bool xrsr_ws_queue_msg_out(xrsr_state_ws_t *ws, const char *msg, uint32_t length
       uint32_t buf_len = length + 1;
       ws->msg_out[ws->msg_out_count] = (char *)malloc(sizeof(char) * buf_len);
       if(ws->msg_out[ws->msg_out_count] == NULL) {
-         XLOGD_ERROR("failed to allocate msg_out buffer");
+         XLOGD_ERROR("src <%s> failed to allocate msg_out buffer", xrsr_src_str(ws->audio_src));
       } else {
          snprintf(ws->msg_out[ws->msg_out_count], buf_len, "%s", msg);
          ws->msg_out_count++;
@@ -744,11 +748,11 @@ bool xrsr_ws_get_msg_out(xrsr_state_ws_t *ws, char **msg, uint32_t *length) {
          }
          ws->msg_out[i] = NULL;
       } else {
-         XLOGD_WARN("No outgoing messages available");
+         XLOGD_WARN("src <%s> No outgoing messages available", xrsr_src_str(ws->audio_src));
       }
       sem_post(&ws->msg_out_semaphore);
    } else {
-      XLOGD_ERROR("NULL parameters");
+      XLOGD_ERROR("src <%s> NULL parameters", xrsr_src_str(ws->audio_src));
    }
    return(ret);
 }
@@ -822,7 +826,7 @@ void St_Ws_Disconnected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardR
          rdkx_timestamp_t timestamp;
          rdkx_timestamp_get_realtime(&timestamp);
          if(ws->handlers.disconnected == NULL) {
-            XLOGD_INFO("disconnected handler not available");
+            XLOGD_INFO("src <%s> disconnected handler not available", xrsr_src_str(ws->audio_src));
          } else {
             (*ws->handlers.disconnected)(ws->handlers.data, ws->uuid, ws->session_end_reason, false, &ws->detect_resume, &timestamp);
          }
@@ -851,11 +855,11 @@ void St_Ws_Disconnecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuard
             nopoll_conn_set_on_close(ws->obj_conn, NULL, NULL);
 
             // only call close if network is available
-            XLOG_DEBUG("nopoll ref count %d, should be 2...", nopoll_conn_ref_count(ws->obj_conn));
+            XLOG_DEBUG("src <%s> nopoll ref count %d, should be 2...", xrsr_src_str(ws->audio_src), nopoll_conn_ref_count(ws->obj_conn));
             if(ws->on_close == false) {
                nopoll_conn_close(ws->obj_conn);
             } else {
-               XLOG_DEBUG("server closed the connection");
+               XLOG_DEBUG("src <%s> server closed the connection", xrsr_src_str(ws->audio_src));
             }
             ws->obj_conn = NULL;
          }
@@ -950,7 +954,7 @@ void St_Ws_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRes
 
                      if(ws->timer_obj && ws->timer_id >= 0) {
                         if(!rdkx_timer_update(ws->timer_obj, ws->timer_id, timeout)) {
-                           XLOGD_ERROR("timer update");
+                           XLOGD_ERROR("src <%s> timer update", xrsr_src_str(ws->audio_src));
                         }
                      }
                   }
@@ -990,7 +994,7 @@ void St_Ws_Connecting(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRes
          }
          if(ws->timer_obj != NULL && ws->timer_id >= 0) {
             if(!rdkx_timer_remove(ws->timer_obj, ws->timer_id)) {
-               XLOGD_ERROR("timer remove");
+               XLOGD_ERROR("src <%s> timer remove", xrsr_src_str(ws->audio_src));
             }
             ws->timer_id = RDXK_TIMER_ID_INVALID;
          }
@@ -1024,9 +1028,9 @@ void St_Ws_Connected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
          switch(pEvent->mID) {
             case SM_EVENT_TIMEOUT: {
                if(!xrsr_ws_conn_is_ready(ws)) {
-                  XLOGD_WARN("websocket is not ready");
+                  XLOGD_WARN("src <%s> websocket is not ready", xrsr_src_str(ws->audio_src));
                   if(ws->connect_wait_time <= 0) {
-                     XLOGD_ERROR("server hang on HTTP upgrade request");
+                     XLOGD_ERROR("src <%s> server hang on HTTP upgrade request", xrsr_src_str(ws->audio_src));
                      xrsr_ws_event(ws, SM_EVENT_ESTABLISH_TIMEOUT, true);
                   } else {
                      rdkx_timestamp_t timeout;
@@ -1036,7 +1040,7 @@ void St_Ws_Connected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
 
                      if(ws->timer_obj && ws->timer_id >= 0) {
                         if(!rdkx_timer_update(ws->timer_obj, ws->timer_id, timeout)) {
-                           XLOGD_ERROR("timer update");
+                           XLOGD_ERROR("src <%s> timer update", xrsr_src_str(ws->audio_src));
                         }
                      }
                   }
@@ -1077,7 +1081,7 @@ void St_Ws_Connected(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
          }
          if(ws->timer_obj != NULL && ws->timer_id >= 0) {
             if(!rdkx_timer_remove(ws->timer_obj, ws->timer_id)) {
-               XLOGD_ERROR("timer remove");
+               XLOGD_ERROR("src <%s> timer remove", xrsr_src_str(ws->audio_src));
             }
             ws->timer_id = RDXK_TIMER_ID_INVALID;
          }
@@ -1115,7 +1119,7 @@ void St_Ws_Established(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
                rdkx_timestamp_add_ms(&timeout, ws->timeout_inactivity);
                if(ws->timer_obj && ws->timer_id >= 0) {
                   if(!rdkx_timer_update(ws->timer_obj, ws->timer_id, timeout)) {
-                     XLOGD_ERROR("timer update");
+                     XLOGD_ERROR("src <%s> timer update", xrsr_src_str(ws->audio_src));
                   }
                }
                break;
@@ -1150,7 +1154,7 @@ void St_Ws_Established(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardRe
          }
          if(ws->timer_obj != NULL && ws->timer_id >= 0) {
             if(!rdkx_timer_remove(ws->timer_obj, ws->timer_id)) {
-               XLOGD_ERROR("timer remove");
+               XLOGD_ERROR("src <%s> timer remove", xrsr_src_str(ws->audio_src));
             }
             ws->timer_id = RDXK_TIMER_ID_INVALID;
          }
@@ -1175,7 +1179,7 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
          bool success = false;
          // Call connected handler
          if(ws->handlers.connected == NULL) {
-            XLOGD_INFO("connected handler not available");
+            XLOGD_INFO("src <%s> connected handler not available", xrsr_src_str(ws->audio_src));
          } else {
             rdkx_timestamp_t timestamp;
             rdkx_timestamp_get_realtime(&timestamp);
@@ -1224,7 +1228,7 @@ void St_Ws_Streaming(tStateEvent *pEvent, eStateAction eAction, BOOL *bGuardResp
                break;
             }
             case SM_EVENT_TEXT_SESSION_SUCCESS: {
-               XLOGD_INFO("SM_EVENT_TEXT_SESSION_SUCCESS - text-only session init message sent successfully.");
+               XLOGD_INFO("src <%s> SM_EVENT_TEXT_SESSION_SUCCESS - text-only session init message sent successfully.", xrsr_src_str(ws->audio_src));
                break;
             }
             default: {
@@ -1314,7 +1318,7 @@ void St_Ws_Connection_Retry(tStateEvent *pEvent, eStateAction eAction, BOOL *bGu
          uint32_t slots = 1 << ws->retry_cnt;
          uint32_t retry_delay_ms = ws->backoff_delay * (rand() % slots);
 
-         XLOGD_INFO("retry connection - delay <%u> ms", retry_delay_ms);
+         XLOGD_INFO("src <%s> retry connection - delay <%u> ms", xrsr_src_str(ws->audio_src), retry_delay_ms);
 
          rdkx_timestamp_t timeout;
          rdkx_timestamp_get(&timeout);
@@ -1341,7 +1345,7 @@ void St_Ws_Connection_Retry(tStateEvent *pEvent, eStateAction eAction, BOOL *bGu
          }
          if(ws->timer_obj != NULL && ws->timer_id >= 0) {
             if(!rdkx_timer_remove(ws->timer_obj, ws->timer_id)) {
-               XLOGD_ERROR("timer remove");
+               XLOGD_ERROR("src <%s> timer remove", xrsr_src_str(ws->audio_src));
             }
             ws->timer_id = RDXK_TIMER_ID_INVALID;
          }
