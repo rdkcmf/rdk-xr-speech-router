@@ -568,7 +568,16 @@ bool xrsr_xraudio_stream_begin(xrsr_xraudio_object_t object, const char *stream_
 
    XLOGD_INFO("stream id <%s> source <%s> user <%s> pipe <%d, %d> frame size <%llu> group qty <%u> duration <%u> usecs", stream_id, xraudio_devices_input_str(source), user_initiated ? "YES" : "NO", dsts[0].pipe, dsts[1].pipe, frame_byte_qty, frame_group_quantity, frame_duration);
 
-   xraudio_result_t result = xraudio_stream_frame_group_quantity_set(obj->xraudio_obj, frame_group_quantity);
+   xraudio_stream_latency_mode_t latency_mode = (low_latency) ? XRAUDIO_STREAM_LATENCY_LOW : XRAUDIO_STREAM_LATENCY_NORMAL;
+   xraudio_result_t result = XRAUDIO_RESULT_OK;
+   if(latency_mode != XRAUDIO_STREAM_LATENCY_NORMAL) {
+      result = xraudio_stream_latency_mode_set(obj->xraudio_obj, latency_mode);
+      if(result != XRAUDIO_RESULT_OK) {
+         XLOGD_WARN("unable to set stream to low latency <%s>", xraudio_result_str(result));
+      }
+   }
+
+   result = xraudio_stream_frame_group_quantity_set(obj->xraudio_obj, frame_group_quantity);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_WARN("unable to set frame group quantity <%s>", xraudio_result_str(result));
    }
