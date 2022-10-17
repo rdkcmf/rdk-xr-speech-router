@@ -1059,8 +1059,15 @@ bool xrsr_privacy_mode_get(bool *enabled) {
    msg.result      = &result;
 
    xrsr_queue_msg_push(xrsr_msgq_fd_get(), (const char *)&msg, sizeof(msg));
+   
    sem_wait(&semaphore);
    sem_destroy(&semaphore);
+
+   if(!result) {
+      XLOGD_ERROR("failed to get privacy mode");
+   } else {
+      g_xrsr.privacy_mode = *enabled;
+   }
 
    return(result);
 }

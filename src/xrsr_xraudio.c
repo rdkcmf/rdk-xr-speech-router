@@ -965,6 +965,8 @@ bool xrsr_xraudio_privacy_mode_get(xrsr_xraudio_object_t object, bool *enabled) 
       return false;
    }
 
+   obj->xraudio_privacy_mode = *enabled;
+
    return true;
 }
 
