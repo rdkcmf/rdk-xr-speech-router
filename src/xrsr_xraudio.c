@@ -816,6 +816,14 @@ void xrsr_xraudio_local_mic_type_get(xrsr_xraudio_obj_t *obj) {
          } else {
             g_local_mic_full_power = XRAUDIO_DEVICE_INPUT_NONE;
          }
+         // add echo canceller reference channels if necessary
+         if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_EC_REF_MONO) {
+            g_local_mic_full_power |= XRAUDIO_DEVICE_INPUT_EC_REF_MONO;
+         } else if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_EC_REF_STEREO) {
+            g_local_mic_full_power |= XRAUDIO_DEVICE_INPUT_EC_REF_STEREO;
+         } else if(obj->available_inputs[i] & XRAUDIO_DEVICE_INPUT_EC_REF_5_1) {
+            g_local_mic_full_power |= XRAUDIO_DEVICE_INPUT_EC_REF_5_1;
+         }
          break;
       }
    }
