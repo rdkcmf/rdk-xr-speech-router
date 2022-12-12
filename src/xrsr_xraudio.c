@@ -45,6 +45,7 @@ typedef struct {
    xraudio_devices_input_t       device_input;
    xraudio_devices_output_t      device_output;
    bool                          detect_active;
+   bool                          session_rejected;
    xraudio_keyword_phrase_t      keyword_phrase;
    xraudio_keyword_sensitivity_t keyword_sensitivity;
    xraudio_devices_input_t       available_inputs[XRAUDIO_INPUT_MAX_DEVICE_QTY];
@@ -90,6 +91,7 @@ xrsr_xraudio_object_t xrsr_xraudio_create(xraudio_keyword_phrase_t keyword_phras
    obj->device_input         = XRAUDIO_DEVICE_INPUT_NONE;
    obj->device_output        = XRAUDIO_DEVICE_OUTPUT_NONE;
    obj->detect_active        = true;
+   obj->session_rejected     = false;
    obj->keyword_phrase       = keyword_phrase;
    obj->keyword_sensitivity  = keyword_sensitivity;
    obj->xraudio_obj          = xraudio_object_create(json_obj_xraudio);
@@ -436,6 +438,12 @@ void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj) {
       XLOGD_ERROR("xraudio_detect_params <%s>", xraudio_result_str(result));
    }
 
+   if(obj->session_rejected) {
+      XLOGD_INFO("unlock xraudio semaphore after rejecting session");
+      xraudio_stream_stop(obj->xraudio_obj, obj->device_input, -1);
+      obj->session_rejected = false;
+   }
+
    result = xraudio_detect_keyword(obj->xraudio_obj, (keyword_callback_t) xrsr_xraudio_keyword_callback, obj);
    if(result != XRAUDIO_RESULT_OK) {
       XLOGD_ERROR("xraudio keyword detect <%s>", xraudio_result_str(result));
@@ -490,6 +498,7 @@ void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_
 
    if((uint32_t)current_session_src < XRSR_SRC_INVALID && current_session_src != src) {
       XLOGD_WARN("Rejecting keyword detected from source <%s>, session in progress on source <%s>.  Restarting keyword detector...", xrsr_src_str(src), xrsr_src_str(current_session_src));
+      obj->session_rejected = true;
       xrsr_xraudio_keyword_detect_start(obj);   //xrsr_xraudio_keyword_detect_stop() needs to be called before this.
       return;
    }
