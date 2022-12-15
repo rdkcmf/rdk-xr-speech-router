@@ -58,7 +58,6 @@ static void xrsr_xraudio_resource_notification(xraudio_resource_event_t event, v
 #endif
 static void xrsr_xraudio_keyword_callback(xraudio_devices_input_t source, keyword_callback_event_t event, void *param, xraudio_keyword_detector_result_t *detector_result, xraudio_input_format_t format);
 static void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback_event_t event, void *event_param, void *user_param);
-static void xrsr_xraudio_device_close(xrsr_xraudio_object_t object);
 static void xrsr_xraudio_keyword_detect_start(xrsr_xraudio_obj_t *obj);
 static void xrsr_xraudio_keyword_detect_stop(xrsr_xraudio_obj_t *obj);
 static void xrsr_audio_stats_clear(xrsr_xraudio_stream_t *stream);
@@ -740,6 +739,10 @@ void xrsr_xraudio_stream_event(xraudio_devices_input_t source, audio_in_callback
 
          xraudio_stream_keyword_info_t *kwd_info = (xraudio_stream_keyword_info_t *)event_param;
          msg.event.data.byte_qty = kwd_info->byte_qty;
+         break;
+      }
+      case AUDIO_IN_CALLBACK_EVENT_ERROR: {
+         msg.event.event = XRSR_EVENT_STREAM_ERROR;
          break;
       }
       default: {

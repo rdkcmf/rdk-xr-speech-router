@@ -66,7 +66,8 @@ typedef enum {
    XRSR_EVENT_EOS                 = 0,
    XRSR_EVENT_STREAM_TIME_MINIMUM = 1,
    XRSR_EVENT_STREAM_KWD_INFO     = 2,
-   XRSR_EVENT_INVALID             = 3
+   XRSR_EVENT_STREAM_ERROR        = 3,
+   XRSR_EVENT_INVALID             = 4
 } xrsr_event_t;
 
 typedef enum {
@@ -308,6 +309,7 @@ void xrsr_xraudio_device_granted(xrsr_xraudio_object_t object);
 void xrsr_xraudio_device_revoked(xrsr_xraudio_object_t object);
 void xrsr_xraudio_device_request(xrsr_xraudio_object_t object);
 void xrsr_xraudio_device_update(xrsr_xraudio_object_t object, xrsr_src_t srcs[]);
+void xrsr_xraudio_device_close(xrsr_xraudio_object_t object);
 void xrsr_xraudio_keyword_detect_params(xrsr_xraudio_object_t *obj, xraudio_keyword_phrase_t keyword_phrase, xraudio_keyword_sensitivity_t keyword_sensitivity);
 void xrsr_xraudio_keyword_detect_restart(xrsr_xraudio_object_t object);
 void xrsr_xraudio_keyword_detected(xrsr_xraudio_object_t object, xrsr_queue_msg_keyword_detected_t *msg, xrsr_src_t current_session_src);

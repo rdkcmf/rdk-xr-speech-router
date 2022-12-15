@@ -1583,6 +1583,23 @@ void xrsr_msg_xraudio_event(const xrsr_thread_params_t *params, xrsr_thread_stat
    }
 
    if(event->event.event != XRSR_EVENT_INVALID) {
+      if(event->event.event == XRSR_EVENT_STREAM_ERROR) {
+         xrsr_xraudio_device_close(g_xrsr.xrsr_xraudio_object);
+         if(xrsr_is_source_active(src)) { // Terminate active session on this source since an error occurred
+            XLOGD_INFO("terminate source <%s>", xrsr_src_str(src));
+            xrsr_queue_msg_session_terminate_t terminate;
+            terminate.header.type = XRSR_QUEUE_MSG_TYPE_SESSION_TERMINATE;
+            terminate.semaphore   = NULL;
+            terminate.src         = src;
+            xrsr_msg_session_terminate(params, state, &terminate);
+         }
+         #ifdef XRAUDIO_RESOURCE_MGMT
+         xrsr_xraudio_device_request(g_xrsr.xrsr_xraudio_object);
+         #else
+         xrsr_xraudio_device_granted(g_xrsr.xrsr_xraudio_object);
+         #endif
+         return;
+      }
       uint32_t index_src = src;
       for(uint32_t index_dst = 0; index_dst < XRSR_DST_QTY_MAX; index_dst++) {
          xrsr_dst_int_t *dst = &g_xrsr.routes[index_src].dsts[index_dst];
